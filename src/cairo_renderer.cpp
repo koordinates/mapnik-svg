@@ -33,6 +33,12 @@
 #include <mapnik/config_error.hpp>
 #include <mapnik/parse_path.hpp>
 #include <mapnik/image_cache.hpp>
+#include <mapnik/svg/marker_cache.hpp>
+#include <mapnik/svg/svg_converter.hpp>
+#include <mapnik/svg/svg_renderer.hpp>
+#include <mapnik/svg/svg_path_adapter.hpp>
+#include <mapnik/svg/svg_path_attributes.hpp>
+
 // cairo
 #include <cairomm/context.h>
 #include <cairomm/surface.h>
@@ -277,6 +283,15 @@ public:
         context_->move_to(x, y);
     }
 
+    void curve_to(double ct1_x, double ct1_y, double ct2_x, double ct2_y, double end_x, double end_y)
+    {
+        context_->curve_to(ct1_x,ct1_y,ct2_x,ct2_y,end_x,end_y);
+    }
+
+    void close_path()
+    {
+        context_->close_path();
+    }
 
     void line_to(double x, double y)
     {
@@ -291,11 +306,11 @@ public:
     }
 
     template <typename T>
-    void add_path(T& path)
+    void add_path(T& path, unsigned start_index = 0)
     {
         double x, y;
 
-        path.rewind(0);
+        path.rewind(start_index);
 
         for (unsigned cm = path.vertex(&x, &y); cm != SEG_END; cm = path.vertex(&x, &y))
         {
@@ -306,6 +321,63 @@ public:
             else if (cm == SEG_LINETO)
             {
                 line_to(x, y);
+            }
+        }
+    }
+
+    template <typename T>
+    void add_agg_path(T& path, unsigned start_index = 0)
+    {
+        double x, y;
+
+        path.rewind(start_index);
+
+        for (unsigned cm = path.vertex(&x, &y); !agg::is_stop(cm); cm = path.vertex(&x, &y))
+        {
+            if (agg::is_move_to(cm))
+            {
+                move_to(x, y);
+            }
+            else if (agg::is_drawing(cm))
+            {
+                if (agg::is_curve3(cm))
+                {
+                    double end_x;
+                    double end_y;
+                    std::cerr << "Curve 3 not implemented" << std::endl;
+                    path.vertex(&end_x, &end_y);
+
+                    curve_to(x,y,x,y,end_x,end_y);
+                }
+                else if (agg::is_curve4(cm))
+                {
+                    double ct2_x;
+                    double ct2_y;
+                    double end_x;
+                    double end_y;
+
+                    path.vertex(&ct2_x, &ct2_y);
+                    path.vertex(&end_x, &end_y);
+
+                    curve_to(x,y,ct2_x,ct2_y,end_x,end_y);
+                }
+                else if (agg::is_line_to(cm))
+                {
+                    line_to(x, y);
+                }
+                else
+                {
+                    std::cerr << "Unimplemented drawing command: " << cm << std::endl;
+                    move_to(x, y);
+                }
+            }
+            else if (agg::is_close(cm))
+            {
+                close_path();
+            }
+            else
+            {
+                std::cerr << "Unimplemented path command: " << cm << std::endl;
             }
         }
     }
@@ -360,6 +432,26 @@ public:
     void set_matrix(Cairo::Matrix const& matrix)
     {
         context_->set_matrix(matrix);
+    }
+
+    void transform(Cairo::Matrix const& matrix)
+    {
+        context_->transform(matrix);
+    }
+
+    void translate(double x, double y)
+    {
+        context_->translate(x,y);
+    }
+
+    void save()
+    {
+        context_->save();
+    }
+
+    void restore()
+    {
+        context_->restore();
     }
 
     void show_glyph(unsigned long index, double x, double y)
@@ -734,14 +826,70 @@ void cairo_renderer_base::process(line_symbolizer const& sym,
     }
 }
 
+void render_svg_marker_to_cairo(cairo_context &context, path_ptr &marker, agg::trans_affine const& mtx, double opacity=1.0)
+
+{
+    typedef coord_transform2<CoordTransform,geometry_type> path_type;
+
+    agg::pod_bvector<path_attributes> const & attributes_ = marker->attributes();
+    for(unsigned i = 0; i < attributes_.size(); ++i)
+    {
+        context.save();
+
+        mapnik::svg::path_attributes const& attr = attributes_[i];
+        agg::trans_affine transform = attr.transform;
+        transform *= mtx;
+
+        if (transform.is_valid() && !transform.is_identity())
+        {
+            double m[6];
+            transform.store_to(m);
+            context.transform(Cairo::Matrix(m[0],m[1],m[2],m[3],m[4],m[5]));
+        }
+
+        vertex_stl_adapter<svg_path_storage> stl_storage(marker->source());
+        svg_path_adapter svg_path(stl_storage);
+
+        if(attr.fill_flag)
+        {
+            context.set_color(attr.fill_color.r,attr.fill_color.g,attr.fill_color.b,attr.opacity*opacity);
+            context.add_agg_path(svg_path,attr.index);
+            context.fill();
+        }
+
+        if(attr.stroke_flag)
+        {
+            context.set_color(attr.stroke_color.r,attr.stroke_color.g,attr.stroke_color.b,attr.opacity*opacity);
+            context.set_line_width(attr.stroke_width);
+            context.set_line_cap(line_cap_enum(attr.line_cap));
+            context.set_line_join(line_join_enum(attr.line_join));
+            context.set_miter_limit(attr.miter_limit);
+            context.add_agg_path(svg_path,attr.index);
+            context.stroke();
+
+        }
+        context.restore();
+    }
+}
+
 void cairo_renderer_base::process(point_symbolizer const& sym,
                                   Feature const& feature,
                                   proj_transform const& prj_trans)
 {   
     std::string filename = path_processor_type::evaluate( *sym.get_filename(), feature);
     boost::optional<mapnik::image_ptr> data;
-    
-    if ( filename.empty() )
+    boost::optional<path_ptr> marker;
+    box2d<double> bbox;
+
+    if (is_svg(filename))
+    {
+        marker = marker_cache::instance()->find(filename, true);
+        if (marker && *marker)
+        {
+            bbox = (*marker)->bounding_box();
+        }
+    }
+    else if ( filename.empty() )
     {
         // default OGC 4x4 black pixel
         data = boost::optional<mapnik::image_ptr>(new image_data_32(4,4));
@@ -751,8 +899,12 @@ void cairo_renderer_base::process(point_symbolizer const& sym,
     {
         data = mapnik::image_cache::instance()->find(filename,true);
     }
-       
     if (data)
+    {
+        bbox.expand_to_include((*data)->width(),(*data)->height());
+    }
+
+    if (data || marker)
     {
         for (unsigned i = 0; i < feature.num_geometries(); ++i)
         {
@@ -760,22 +912,41 @@ void cairo_renderer_base::process(point_symbolizer const& sym,
             double x;
             double y;
             double z = 0;
-               
+
             geom.label_position(&x, &y);
             prj_trans.backward(x, y, z);
             t_.forward(&x, &y);
-               
-            int w = (*data)->width();
-            int h = (*data)->height();
+
+            int w = bbox.width();
+            int h = bbox.height();
+
             int px = int(floor(x - 0.5 * w));
             int py = int(floor(y - 0.5 * h));
             box2d<double> label_ext (px, py, px + w, py + h);
             if (sym.get_allow_overlap() ||
-                detector_.has_placement(label_ext))
+                    detector_.has_placement(label_ext))
             {
                 cairo_context context(context_);
 
-                context.add_image(px, py, *(*data), sym.get_opacity());
+                if (data)
+                {
+                    context.add_image(px, py, *(*data), sym.get_opacity());
+                }
+                else if (marker)
+                {
+                    coord<double,2> c = bbox.center();
+                    agg::trans_affine recenter = agg::trans_affine_translation(-c.x,-c.y);
+
+                    agg::trans_affine tr;
+                    boost::array<double,6> const& m = sym.get_transform();
+                    tr.load_from(&m[0]);
+                    tr = recenter * tr;
+                    tr *= agg::trans_affine_translation(x, y);
+
+                    vertex_stl_adapter<svg_path_storage> stl_storage((*marker)->source());
+                    svg_path_adapter svg_path(stl_storage);
+                    render_svg_marker_to_cairo(context, *marker, tr, sym.get_opacity());
+                }
                 detector_.insert(label_ext);
                 metawriter_with_properties writer = sym.get_metawriter();
                 if (writer.first)
@@ -799,9 +970,30 @@ void cairo_renderer_base::process(shield_symbolizer const& sym,
     UnicodeString text = result.to_unicode();
     
     std::string filename = path_processor_type::evaluate( *sym.get_filename(), feature);
-    boost::optional<mapnik::image_ptr> data = mapnik::image_cache::instance()->find(filename,true);
+    boost::optional<mapnik::image_ptr> data;
+    boost::optional<path_ptr> marker;
+    box2d<double> bbox;
+
+
+    if (is_svg(filename))
+    {
+        marker = marker_cache::instance()->find(filename, true);
+        if (marker && *marker)
+        {
+            bbox = (*marker)->bounding_box();
+        }
+    }
+    else
+    {
+        data = mapnik::image_cache::instance()->find(filename,true);
+        if (data)
+        {
+            bbox.expand_to_include((*data)->width(),(*data)->height());
+        }
+    }
+
     
-    if (text.length() > 0 && data)
+    if (text.length() > 0 && (data || marker))
     {
         face_set_ptr faces;
 
@@ -824,8 +1016,8 @@ void cairo_renderer_base::process(shield_symbolizer const& sym,
 
             placement_finder<label_collision_detector4> finder(detector_);
 
-            int w = (*data)->width();
-            int h = (*data)->height();
+            int w = bbox.width();
+            int h = bbox.height();
 
             metawriter_with_properties writer = sym.get_metawriter();
 
@@ -863,8 +1055,26 @@ void cairo_renderer_base::process(shield_symbolizer const& sym,
                             box2d<double> label_ext (floor(lx - 0.5 * w), floor(ly - 0.5 * h), ceil (lx + 0.5 * w), ceil (ly + 0.5 * h));
 
                             if (detector_.has_placement(label_ext))
-                            {    
-                                context.add_image(px, py, *(*data));
+                            {
+                                if (data)
+                                {
+                                    context.add_image(px, py, *(*data), sym.get_opacity());
+                                }
+                                else if (marker)
+                                {
+                                    coord<double,2> c = bbox.center();
+                                    agg::trans_affine recenter = agg::trans_affine_translation(-c.x,-c.y);
+
+                                    agg::trans_affine tr;
+                                    boost::array<double,6> const& m = sym.get_transform();
+                                    tr.load_from(&m[0]);
+                                    tr = recenter * tr;
+                                    tr *= agg::trans_affine_translation(x, y);
+
+                                    vertex_stl_adapter<svg_path_storage> stl_storage((*marker)->source());
+                                    svg_path_adapter svg_path(stl_storage);
+                                    render_svg_marker_to_cairo(context, *marker, tr, sym.get_opacity());
+                                }
                                 context.add_text(text_placement.placements[ii],
                                                  face_manager_,
                                                  faces,
@@ -897,7 +1107,25 @@ void cairo_renderer_base::process(shield_symbolizer const& sym,
                             int px = int(x - (w/2));
                             int py = int(y - (h/2));
 
-                            context.add_image(px, py, *(*data));
+                            if (data)
+                            {
+                                context.add_image(px, py, *(*data), sym.get_opacity());
+                            }
+                            else if (marker)
+                            {
+                                coord<double,2> c = bbox.center();
+                                agg::trans_affine recenter = agg::trans_affine_translation(-c.x,-c.y);
+
+                                agg::trans_affine tr;
+                                boost::array<double,6> const& m = sym.get_transform();
+                                tr.load_from(&m[0]);
+                                tr = recenter * tr;
+                                tr *= agg::trans_affine_translation(x, y);
+
+                                vertex_stl_adapter<svg_path_storage> stl_storage((*marker)->source());
+                                svg_path_adapter svg_path(stl_storage);
+                                render_svg_marker_to_cairo(context, *marker, tr, sym.get_opacity());
+                            }
                             context.add_text(text_placement.placements[ii],
                                              face_manager_,
                                              faces,
