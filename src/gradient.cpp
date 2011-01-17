@@ -27,6 +27,7 @@ namespace mapnik
 {
 
 static const char * gradient_strings[] = {
+    "no-gradient",
     "linear",
     "radial",
     /*
@@ -45,7 +46,7 @@ IMPLEMENT_ENUM( gradient_e, gradient_strings );
 
 
 gradient::gradient() 
-    : gradient_type_(LINEAR),
+    : gradient_type_(NO_GRADIENT),
       stops_() {}
 
 gradient::gradient(gradient const& other)

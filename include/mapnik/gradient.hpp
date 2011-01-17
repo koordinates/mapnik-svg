@@ -39,6 +39,7 @@ typedef std::vector<stop_pair > stop_array;
         
 enum gradient_enum
 {
+    NO_GRADIENT,
     LINEAR,
     RADIAL,
     /*"radial_focus",

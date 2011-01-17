@@ -14,21 +14,16 @@
    id="svg2"
    inkscape:version="0.48.0 r9654"
    sodipodi:docname="ellipses.svg">
-  <metadata
-     id="metadata14">
-    <rdf:RDF>
-      <cc:Work
-         rdf:about="">
-        <dc:format>image/svg+xml</dc:format>
-        <dc:type
-           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-      </cc:Work>
-    </rdf:RDF>
-  </metadata>
   <defs
      id="defs12">
     <linearGradient
-       id="linearGradient3769">
+       collect="always"
+       id="linearGradient3775"
+       x1="-3.6735799"
+       y1="-23.937874"
+       x2="-3.7502804"
+       y2="-15.933016"
+       gradientUnits="userSpaceOnUse">
       <stop
          style="stop-color:#008000;stop-opacity:1;"
          offset="0"
@@ -38,9 +33,16 @@
          offset="1"
          id="stop3773" />
     </linearGradient>
-    <linearGradient
-       id="linearGradient3759">
-      <stop
+    <radialGradient
+       collect="always"
+       id="radialGradient3765"
+       cx="-1.2957155"
+       cy="-21.425594"
+       fx="-1.2957155"
+       fy="-21.425594"
+       r="5.1999998"
+       gradientUnits="userSpaceOnUse">
+             <stop
          style="stop-color:#ff0000;stop-opacity:1;"
          offset="0"
          id="stop3761" />
@@ -52,47 +54,8 @@
          style="stop-color:#ffffff;stop-opacity:1;"
          offset="1"
          id="stop3763" />
-    </linearGradient>
-    <radialGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient3759"
-       id="radialGradient3765"
-       cx="-2.0657699"
-       cy="-22.323992"
-       fx="-2.0657699"
-       fy="-22.323992"
-       r="5.1999998"
-       gradientUnits="userSpaceOnUse" />
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient3769"
-       id="linearGradient3775"
-       x1="-3.6735799"
-       y1="-23.937874"
-       x2="-3.7502804"
-       y2="-15.933016"
-       gradientUnits="userSpaceOnUse" />
+    </radialGradient>
   </defs>
-  <sodipodi:namedview
-     pagecolor="#ffffff"
-     bordercolor="#666666"
-     borderopacity="1"
-     objecttolerance="10"
-     gridtolerance="10"
-     guidetolerance="10"
-     inkscape:pageopacity="0"
-     inkscape:pageshadow="2"
-     inkscape:window-width="1280"
-     inkscape:window-height="758"
-     id="namedview10"
-     showgrid="false"
-     inkscape:zoom="15.490593"
-     inkscape:cx="-1.0391664"
-     inkscape:cy="1073.3742"
-     inkscape:window-x="0"
-     inkscape:window-y="0"
-     inkscape:window-maximized="1"
-     inkscape:current-layer="svg2" />
   <ellipse
      cy="-20"
      rx="10"

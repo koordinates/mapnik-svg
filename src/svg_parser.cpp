@@ -184,17 +184,21 @@ void svg_parser::start_element(xmlTextReaderPtr reader)
     {
         parse_ellipse(reader);
     }
-    else if (!is_defs_ && xmlStrEqual(name, BAD_CAST "linearGradient"))
+    else if (xmlStrEqual(name, BAD_CAST "linearGradient"))
     {
         parse_linear_gradient(reader);
     }
-    else if (!is_defs_ && xmlStrEqual(name, BAD_CAST "radialGradient"))
+    else if (xmlStrEqual(name, BAD_CAST "radialGradient"))
     {
         parse_radial_gradient(reader);
     }
-    else if (!is_defs_ && xmlStrEqual(name, BAD_CAST "pattern"))
+    else if (xmlStrEqual(name, BAD_CAST "radialGradient"))
     {
-        parse_pattern(reader);
+        parse_radial_gradient(reader);
+    }
+    else if (is_defs_ && xmlStrEqual(name, BAD_CAST "stop"))
+    {
+        parse_gradient_stop(reader);
     }
     else
     {
@@ -214,6 +218,10 @@ void svg_parser::end_element(xmlTextReaderPtr reader)
     {
         is_defs_ = false;
     }
+    else if ((xmlStrEqual(name, BAD_CAST "linearGradient")) || (xmlStrEqual(name, BAD_CAST "radialGradient")))
+    {
+        gradient_map_[temporary_gradient_.first] = temporary_gradient_.second;
+    }
 }
 
 void svg_parser::parse_attr(const xmlChar * name, const xmlChar * value )
@@ -230,26 +238,25 @@ void svg_parser::parse_attr(const xmlChar * name, const xmlChar * value )
         {
             path_.fill_none();
         }
-        else
+        else if (boost::starts_with((const char*)value, "url(#"))
         {
-            if (true)//boost::starts_with((const char*)value, "url("))
+            // see if we have a known gradient fill
+            std::string id = std::string((const char*)&value[5]);
+            // get rid of the trailing )
+            id.erase(id.end()-1);
+            if (gradient_map_.count(id) > 0)
             {
-                //replace_first(val, "url", "Jane");
-                std::clog << "found url: " << value << "\n";
-                //path_.fill(parse_color("red"));
-                mapnik::gradient grad = mapnik::gradient();
-
-                grad.add_stop(0.0, mapnik::color("rgb(168, 251, 121)"));
-                grad.add_stop(0.25, mapnik::color("rgb(245, 254, 97)"));
-                grad.add_stop(0.5, mapnik::color("rgb(254, 59, 16)"));
-                grad.add_stop(1.0, mapnik::color("rgb(254, 19, 243)"));
-                //path_.fill(parse_color("red"));
-                path_.add_gradient(grad);
+                std::cerr << "Found gradient fill: " << id << std::endl;
+                path_.add_gradient(gradient_map_[id]);
             }
             else
             {
-                path_.fill(parse_color((const char*) value));
+                std::cerr << "Failed to find gradient fill: " << id << std::endl;
             }
+        }
+        else
+        {
+            path_.fill(parse_color((const char*) value));
         }
     }
     else if (xmlStrEqual(name, BAD_CAST "fill-opacity"))
@@ -333,7 +340,7 @@ void svg_parser::parse_attr(xmlTextReaderPtr reader)
             BOOST_FOREACH(value_type kv , vec )
             {
                 parse_attr(BAD_CAST kv.first.c_str(),BAD_CAST kv.second.c_str()); 
-            }       
+            }
         }
         else
         {
@@ -563,16 +570,144 @@ void svg_parser::parse_rect(xmlTextReaderPtr reader)
 }
 
 
+/*
+ *       <stop
+         style="stop-color:#ffffff;stop-opacity:1;"
+         offset="1"
+         id="stop3763" />
+ */
+void svg_parser::parse_gradient_stop(xmlTextReaderPtr reader)
+{
+    const xmlChar *value;
+
+    double offset = 0.0;
+    mapnik::color stop_color;
+    double opacity = 0.0;
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "offset");
+    if (value) offset = parse_double((const char*)value);
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "style");
+    if (value)
+    {
+        std::cerr << "Style: " << value << std::endl;
+        typedef std::vector<std::pair<std::string,std::string> > cont_type;
+        typedef cont_type::value_type value_type;
+        cont_type vec;
+        parse_style((const char*)value, vec);
+
+        BOOST_FOREACH(value_type kv , vec )
+        {
+            std::cerr << "StylePart: " << kv.first << std::endl;
+            if (kv.first == "stop-color")
+            {
+                std::cerr << "StopColour" << kv.second << std::endl;
+
+                try
+                {
+                    mapnik::color_factory::init_from_string(stop_color,kv.second.c_str());
+                }
+                catch (mapnik::config_error & ex)
+                {
+                    std::cerr << ex.what() << std::endl;
+                }
+            }
+            else if (kv.first == "stop-opacity")
+            {
+                opacity = parse_double(kv.second.c_str());
+            }
+        }
+    }
+
+    stop_color.set_alpha(opacity*255);
+
+    temporary_gradient_.second.add_stop(offset, stop_color);
+
+    std::cerr << "\tFound Stop: " << offset << " " << (unsigned)stop_color.red() << " " << (unsigned)stop_color.green() << " " << (unsigned)stop_color.blue() << " " << (unsigned)stop_color.alpha() << std::endl;
+
+}
+
+/**
+ *         <radialGradient
+       collect="always"
+       xlink:href="#linearGradient3759"
+       id="radialGradient3765"
+       cx="-1.2957155"
+       cy="-21.425594"
+       fx="-1.2957155"
+       fy="-21.425594"
+       r="5.1999998"
+       gradientUnits="userSpaceOnUse" />
+ */
 void svg_parser::parse_radial_gradient(xmlTextReaderPtr reader)
 {
-    // cx cy r gradientTransform="matrix(1 0 0 1 0 -23)" gradientUnits="userSpaceOnUse"
-    //const xmlChar *value;
+    const xmlChar *value;
+    double cx = 0.0;
+    double cy = 0.0;
+    double fx = 0.0;
+    double fy = 0.0;
+    double r = 0.0;
+    double offset = 0.0;
 
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "cx");
+    if (value) cx = parse_double((const char*)value);
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "cy");
+    if (value) cy = parse_double((const char*)value);
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "fx");
+    if (value) fx = parse_double((const char*)value);
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "fy");
+    if (value) fy = parse_double((const char*)value);
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "offset");
+    if (value) offset = parse_double((const char*)value);
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "r");
+    if (value) r = parse_double((const char*)value);
+
+    std::string id;
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "id");
+    if (value) id = std::string((const char *) value);
+    // start a new gradient
+    gradient new_grad;
+    temporary_gradient_ = std::make_pair(id, new_grad);
+    temporary_gradient_.second.set_gradient_type(RADIAL);
+
+    std::cerr << "Found Radial Gradient: " << id << " " << cx << " " << cy << " " << fx << " " << fy << " " << r << " " << offset << std::endl;
 }
 
 void svg_parser::parse_linear_gradient(xmlTextReaderPtr reader)
 {
-    //const xmlChar *value;
+    const xmlChar *value;
+    double x1 = 0.0;
+    double x2 = 0.0;
+    double y1 = 0.0;
+    double y2 = 0.0;
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "x1");
+    if (value) x1 = parse_double((const char*)value);
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "x2");
+    if (value) x2 = parse_double((const char*)value);
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "y1");
+    if (value) y1 = parse_double((const char*)value);
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "y2");
+    if (value) y2 = parse_double((const char*)value);
+
+    std::string id;
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "id");
+    if (value) id = std::string((const char *) value);
+    // start a new gradient
+    gradient new_grad;
+    temporary_gradient_ = std::make_pair(id, new_grad);
+    temporary_gradient_.second.set_gradient_type(LINEAR);
+
+    std::cerr << "Found Linear Gradient: " << id << "(" << x1 << " " << y1 << "),(" << x2 << " " << y2 << ")" << std::endl;
+
 }
 
 void svg_parser::parse_pattern(xmlTextReaderPtr reader)

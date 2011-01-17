@@ -27,9 +27,13 @@
 #include <mapnik/svg/svg_path_attributes.hpp>
 #include <mapnik/svg/svg_converter.hpp>
 #include <mapnik/svg/svg_path_adapter.hpp>
+#include <mapnik/gradient.hpp>
+
 // boost
 #include <boost/utility.hpp>
 #include <libxml/xmlreader.h>
+
+#include <map>
 
 namespace  mapnik { namespace svg {
 
@@ -53,6 +57,7 @@ private:
     void parse_ellipse(xmlTextReaderPtr reader);
     void parse_linear_gradient(xmlTextReaderPtr reader);
     void parse_radial_gradient(xmlTextReaderPtr reader);
+    void parse_gradient_stop(xmlTextReaderPtr reader);
     void parse_pattern(xmlTextReaderPtr reader);
     void parse_attr(xmlTextReaderPtr reader);
     void parse_attr(const xmlChar * name, const xmlChar * value );
@@ -60,6 +65,8 @@ private:
 private:
     svg_converter_type & path_;
     bool is_defs_;
+    std::map<std::string, gradient> gradient_map_;
+    std::pair<std::string, gradient> temporary_gradient_;
 };
 
 }}

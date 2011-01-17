@@ -106,7 +106,7 @@ public:
             
             rgba8 color;
             
-            if (attr.fill_flag)
+            if (attr.fill_flag || attr.gradient.get_gradient_type() != NO_GRADIENT)
             {
                 ras.reset();
                 
@@ -120,7 +120,7 @@ public:
                     ras.add_path(curved_trans_contour, attr.index);
                 }
 
-                if(true)
+                if(attr.gradient.get_gradient_type() != NO_GRADIENT)
                 {
                     typedef agg::gamma_lut<agg::int8u, agg::int8u> gamma_lut_type;
                     typedef agg::gradient_radial gradient_adaptor_type;
@@ -144,7 +144,7 @@ public:
                         unsigned g= stop_color.green();
                         unsigned b= stop_color.blue();
                         unsigned a= stop_color.alpha();
-                        //std::clog << "r: " << r << " g: " << g << " b: " << b << "a: " << a << "\n";
+                        std::clog << "r: " << r << " g: " << g << " b: " << b << "a: " << a << "\n";
                         m_gradient_lut.add_color(st.first, agg::rgba8(r, g, b, int(a * attr.opacity * opacity)));
                     }
                     m_gradient_lut.build_lut();
