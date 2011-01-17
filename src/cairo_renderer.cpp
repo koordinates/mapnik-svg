@@ -32,8 +32,7 @@
 #include <mapnik/arrow.hpp>
 #include <mapnik/config_error.hpp>
 #include <mapnik/parse_path.hpp>
-#include <mapnik/image_cache.hpp>
-#include <mapnik/svg/marker_cache.hpp>
+#include <mapnik/marker_cache.hpp>
 #include <mapnik/svg/svg_converter.hpp>
 #include <mapnik/svg/svg_renderer.hpp>
 #include <mapnik/svg/svg_path_adapter.hpp>
@@ -826,49 +825,68 @@ void cairo_renderer_base::process(line_symbolizer const& sym,
     }
 }
 
-void render_svg_marker_to_cairo(cairo_context &context, path_ptr &marker, agg::trans_affine const& mtx, double opacity=1.0)
+void cairo_renderer_base::render_marker(const int x, const int y, marker &marker, const agg::trans_affine & tr, double opacity)
 
 {
-    typedef coord_transform2<CoordTransform,geometry_type> path_type;
-
-    agg::pod_bvector<path_attributes> const & attributes_ = marker->attributes();
-    for(unsigned i = 0; i < attributes_.size(); ++i)
+    cairo_context context(context_);
+    if (marker.is_vector())
     {
-        context.save();
+        box2d<double> bbox;
+        bbox = (*marker.get_vector_data())->bounding_box();
 
-        mapnik::svg::path_attributes const& attr = attributes_[i];
-        agg::trans_affine transform = attr.transform;
-        transform *= mtx;
+        coord<double,2> c = bbox.center();
+        agg::trans_affine recenter = agg::trans_affine_translation(0.5 * marker.width()-c.x,0.5 * marker.height()-c.y);
 
-        if (transform.is_valid() && !transform.is_identity())
+        agg::trans_affine mtx = tr;
+        mtx = recenter * mtx;
+        mtx *= agg::trans_affine_translation(x, y);
+
+        typedef coord_transform2<CoordTransform,geometry_type> path_type;
+        mapnik::path_ptr vmarker = *marker.get_vector_data();
+
+        agg::pod_bvector<path_attributes> const & attributes_ = vmarker->attributes();
+        for(unsigned i = 0; i < attributes_.size(); ++i)
         {
-            double m[6];
-            transform.store_to(m);
-            context.transform(Cairo::Matrix(m[0],m[1],m[2],m[3],m[4],m[5]));
+            context.save();
+
+            mapnik::svg::path_attributes const& attr = attributes_[i];
+            agg::trans_affine transform = attr.transform;
+            transform *= mtx;
+
+            if (transform.is_valid() && !transform.is_identity())
+            {
+                double m[6];
+                transform.store_to(m);
+                context.transform(Cairo::Matrix(m[0],m[1],m[2],m[3],m[4],m[5]));
+            }
+
+            vertex_stl_adapter<svg_path_storage> stl_storage(vmarker->source());
+            svg_path_adapter svg_path(stl_storage);
+
+            if(attr.fill_flag)
+            {
+                context.set_color(attr.fill_color.r,attr.fill_color.g,attr.fill_color.b,attr.opacity*opacity);
+                context.add_agg_path(svg_path,attr.index);
+                context.fill();
+            }
+
+            if(attr.stroke_flag)
+            {
+                context.set_color(attr.stroke_color.r,attr.stroke_color.g,attr.stroke_color.b,attr.opacity*opacity);
+                context.set_line_width(attr.stroke_width);
+                context.set_line_cap(line_cap_enum(attr.line_cap));
+                context.set_line_join(line_join_enum(attr.line_join));
+                context.set_miter_limit(attr.miter_limit);
+                context.add_agg_path(svg_path,attr.index);
+                context.stroke();
+
+            }
+            context.restore();
         }
-
-        vertex_stl_adapter<svg_path_storage> stl_storage(marker->source());
-        svg_path_adapter svg_path(stl_storage);
-
-        if(attr.fill_flag)
-        {
-            context.set_color(attr.fill_color.r,attr.fill_color.g,attr.fill_color.b,attr.opacity*opacity);
-            context.add_agg_path(svg_path,attr.index);
-            context.fill();
-        }
-
-        if(attr.stroke_flag)
-        {
-            context.set_color(attr.stroke_color.r,attr.stroke_color.g,attr.stroke_color.b,attr.opacity*opacity);
-            context.set_line_width(attr.stroke_width);
-            context.set_line_cap(line_cap_enum(attr.line_cap));
-            context.set_line_join(line_join_enum(attr.line_join));
-            context.set_miter_limit(attr.miter_limit);
-            context.add_agg_path(svg_path,attr.index);
-            context.stroke();
-
-        }
-        context.restore();
+    }
+    else if (marker.is_bitmap())
+    {
+        context.add_image(x, y, **marker.get_bitmap_data(), opacity);
     }
 }
 
@@ -877,34 +895,18 @@ void cairo_renderer_base::process(point_symbolizer const& sym,
                                   proj_transform const& prj_trans)
 {   
     std::string filename = path_processor_type::evaluate( *sym.get_filename(), feature);
-    boost::optional<mapnik::image_ptr> data;
-    boost::optional<path_ptr> marker;
-    box2d<double> bbox;
 
-    if (is_svg(filename))
+    boost::optional<marker_ptr> marker;
+    if ( !filename.empty() )
     {
         marker = marker_cache::instance()->find(filename, true);
-        if (marker && *marker)
-        {
-            bbox = (*marker)->bounding_box();
-        }
-    }
-    else if ( filename.empty() )
-    {
-        // default OGC 4x4 black pixel
-        data = boost::optional<mapnik::image_ptr>(new image_data_32(4,4));
-        (*data)->set(0xff000000);
     }
     else
     {
-        data = mapnik::image_cache::instance()->find(filename,true);
-    }
-    if (data)
-    {
-        bbox.expand_to_include((*data)->width(),(*data)->height());
+        marker.reset(boost::shared_ptr<mapnik::marker> (new mapnik::marker()));
     }
 
-    if (data || marker)
+    if (marker)
     {
         for (unsigned i = 0; i < feature.num_geometries(); ++i)
         {
@@ -917,8 +919,8 @@ void cairo_renderer_base::process(point_symbolizer const& sym,
             prj_trans.backward(x, y, z);
             t_.forward(&x, &y);
 
-            int w = bbox.width();
-            int h = bbox.height();
+            int w = (*marker)->width();
+            int h = (*marker)->height();
 
             int px = int(floor(x - 0.5 * w));
             int py = int(floor(y - 0.5 * h));
@@ -926,28 +928,14 @@ void cairo_renderer_base::process(point_symbolizer const& sym,
             if (sym.get_allow_overlap() ||
                     detector_.has_placement(label_ext))
             {
-                cairo_context context(context_);
+                agg::trans_affine mtx;
+                boost::array<double,6> const& m = sym.get_transform();
+                mtx.load_from(&m[0]);
 
-                if (data)
-                {
-                    context.add_image(px, py, *(*data), sym.get_opacity());
-                }
-                else if (marker)
-                {
-                    coord<double,2> c = bbox.center();
-                    agg::trans_affine recenter = agg::trans_affine_translation(-c.x,-c.y);
+                render_marker(px,py,**marker, mtx, sym.get_opacity());
 
-                    agg::trans_affine tr;
-                    boost::array<double,6> const& m = sym.get_transform();
-                    tr.load_from(&m[0]);
-                    tr = recenter * tr;
-                    tr *= agg::trans_affine_translation(x, y);
-
-                    vertex_stl_adapter<svg_path_storage> stl_storage((*marker)->source());
-                    svg_path_adapter svg_path(stl_storage);
-                    render_svg_marker_to_cairo(context, *marker, tr, sym.get_opacity());
-                }
-                detector_.insert(label_ext);
+                if (!sym.get_ignore_placement())
+                    detector_.insert(label_ext);
                 metawriter_with_properties writer = sym.get_metawriter();
                 if (writer.first)
                 {
@@ -964,36 +952,42 @@ void cairo_renderer_base::process(shield_symbolizer const& sym,
 {
     typedef coord_transform2<CoordTransform,geometry_type> path_type;
 
-    expression_ptr name_expr = sym.get_name();
-    if (!name_expr) return;
-    value_type result = boost::apply_visitor(evaluate<Feature,value_type>(feature),*name_expr);
-    UnicodeString text = result.to_unicode();
+    UnicodeString text;
+    if( sym.get_no_text() )
+        text = UnicodeString( " " );  // TODO: fix->use 'space' as the text to render
+    else
+    {
+        expression_ptr name_expr = sym.get_name();
+        if (!name_expr) return;
+        value_type result = boost::apply_visitor(evaluate<Feature,value_type>(feature),*name_expr);
+        text = result.to_unicode();
+    }
+
+    if ( sym.get_text_transform() == UPPERCASE)
+    {
+        text = text.toUpper();
+    }
+    else if ( sym.get_text_transform() == LOWERCASE)
+    {
+        text = text.toLower();
+    }
     
+    agg::trans_affine tr;
+    boost::array<double,6> const& m = sym.get_transform();
+    tr.load_from(&m[0]);
+
     std::string filename = path_processor_type::evaluate( *sym.get_filename(), feature);
-    boost::optional<mapnik::image_ptr> data;
-    boost::optional<path_ptr> marker;
-    box2d<double> bbox;
-
-
-    if (is_svg(filename))
+    boost::optional<marker_ptr> marker;
+    if ( !filename.empty() )
     {
         marker = marker_cache::instance()->find(filename, true);
-        if (marker && *marker)
-        {
-            bbox = (*marker)->bounding_box();
-        }
     }
     else
     {
-        data = mapnik::image_cache::instance()->find(filename,true);
-        if (data)
-        {
-            bbox.expand_to_include((*data)->width(),(*data)->height());
-        }
+        marker.reset(boost::shared_ptr<mapnik::marker> (new mapnik::marker()));
     }
 
-    
-    if (text.length() > 0 && (data || marker))
+    if (text.length() > 0 && marker)
     {
         face_set_ptr faces;
 
@@ -1011,121 +1005,124 @@ void cairo_renderer_base::process(shield_symbolizer const& sym,
             cairo_context context(context_);
             string_info info(text);
 
+            placement_finder<label_collision_detector4> finder(detector_);
+
             faces->set_pixel_sizes(sym.get_text_size());
             faces->get_string_info(info);
 
-            placement_finder<label_collision_detector4> finder(detector_);
-
-            int w = bbox.width();
-            int h = bbox.height();
+            int w = (*marker)->width();
+            int h = (*marker)->height();
 
             metawriter_with_properties writer = sym.get_metawriter();
 
             for (unsigned i = 0; i < feature.num_geometries(); ++i)
             {
                 geometry_type const& geom = feature.get_geometry(i);
-
                 if (geom.num_points() > 0) // don't bother with empty geometries
                 {
                     path_type path(t_, geom, prj_trans);
 
-                    if (sym.get_label_placement() == POINT_PLACEMENT) 
+                    label_placement_enum how_placed = sym.get_label_placement();
+                    if (how_placed == POINT_PLACEMENT || how_placed == VERTEX_PLACEMENT)
                     {
-                        double label_x;
-                        double label_y;
-                        double z = 0.0;
+                        // for every vertex, try and place a shield/text
+                        geom.rewind(0);
                         placement text_placement(info, sym, 1.0, w, h, false);
-
                         text_placement.avoid_edges = sym.get_avoid_edges();
-                        geom.label_position(&label_x, &label_y);
-                        prj_trans.backward(label_x, label_y, z);
-                        t_.forward(&label_x, &label_y);
-                        finder.find_point_placement(text_placement, label_x, label_y);
+                        text_placement.allow_overlap = sym.get_allow_overlap();
+                        position const& pos = sym.get_displacement();
+                        position const& shield_pos = sym.get_shield_displacement();
+                        for( unsigned jj = 0; jj < geom.num_points(); jj++ )
+                        {
+                            double label_x;
+                            double label_y;
+                            double z=0.0;
 
-                        for (unsigned int ii = 0; ii < text_placement.placements.size(); ++ ii)
-                        { 
-                            double x = text_placement.placements[ii].starting_x;
-                            double y = text_placement.placements[ii].starting_y;
-                            // remove displacement from image label
-                            position pos = sym.get_displacement();
-                            double lx = x - boost::get<0>(pos);
-                            double ly = y - boost::get<1>(pos);
-                            int px = int(lx - (0.5 * w)) ;
-                            int py = int(ly - (0.5 * h)) ;
-                            box2d<double> label_ext (floor(lx - 0.5 * w), floor(ly - 0.5 * h), ceil (lx + 0.5 * w), ceil (ly + 0.5 * h));
+                            if( how_placed == VERTEX_PLACEMENT )
+                                geom.vertex(&label_x,&label_y);  // by vertex
+                            else
+                                geom.label_position(&label_x, &label_y);  // by middle of line or by point
+                            prj_trans.backward(label_x,label_y, z);
+                            t_.forward(&label_x,&label_y);
 
-                            if (detector_.has_placement(label_ext))
+                            label_x += boost::get<0>(shield_pos);
+                            label_y += boost::get<1>(shield_pos);
+
+                            finder.find_point_placement( text_placement,label_x,label_y,0.0,
+                                                         sym.get_vertical_alignment(),
+                                                         sym.get_line_spacing(),
+                                                         sym.get_character_spacing(),
+                                                         sym.get_horizontal_alignment(),
+                                                         sym.get_justify_alignment() );
+
+                            for (unsigned int ii = 0; ii < text_placement.placements.size(); ++ ii)
                             {
-                                if (data)
-                                {
-                                    context.add_image(px, py, *(*data), sym.get_opacity());
-                                }
-                                else if (marker)
-                                {
-                                    coord<double,2> c = bbox.center();
-                                    agg::trans_affine recenter = agg::trans_affine_translation(-c.x,-c.y);
+                                double x = text_placement.placements[ii].starting_x;
+                                double y = text_placement.placements[ii].starting_y;
 
-                                    agg::trans_affine tr;
-                                    boost::array<double,6> const& m = sym.get_transform();
-                                    tr.load_from(&m[0]);
-                                    tr = recenter * tr;
-                                    tr *= agg::trans_affine_translation(x, y);
+                                int px;
+                                int py;
+                                box2d<double> label_ext;
 
-                                    vertex_stl_adapter<svg_path_storage> stl_storage((*marker)->source());
-                                    svg_path_adapter svg_path(stl_storage);
-                                    render_svg_marker_to_cairo(context, *marker, tr, sym.get_opacity());
+                                if( !sym.get_unlock_image() )
+                                {
+                                    // center image at text center position
+                                    // remove displacement from image label
+                                    double lx = x - boost::get<0>(pos);
+                                    double ly = y - boost::get<1>(pos);
+                                    px=int(floor(lx - (0.5 * w)));
+                                    py=int(floor(ly - (0.5 * h)));
+                                    label_ext.init( floor(lx - 0.5 * w), floor(ly - 0.5 * h), ceil (lx + 0.5 * w), ceil (ly + 0.5 * h) );
                                 }
-                                context.add_text(text_placement.placements[ii],
-                                                 face_manager_,
-                                                 faces,
-                                                 sym.get_text_size(),
-                                                 sym.get_fill(),
-                                                 sym.get_halo_radius(),
-                                                 sym.get_halo_fill()
-                                    );
-                                if (writer.first) {
-                                    writer.first->add_box(box2d<double>(px,py,px+w,py+h), feature, t_, writer.second);
-                                    writer.first->add_text(text_placement, faces, feature, t_, writer.second); //Only 1 placement
+                                else
+                                {  // center image at reference location
+                                    px=int(floor(label_x - 0.5 * w));
+                                    py=int(floor(label_y - 0.5 * h));
+                                    label_ext.init( floor(label_x - 0.5 * w), floor(label_y - 0.5 * h), ceil (label_x + 0.5 * w), ceil (label_y + 0.5 * h));
                                 }
-                                detector_.insert(label_ext);
+
+                                if ( sym.get_allow_overlap() || detector_.has_placement(label_ext) )
+                                {
+                                    render_marker(px,py,**marker, tr, sym.get_opacity());
+
+                                    context.add_text(text_placement.placements[ii],
+                                                     face_manager_,
+                                                     faces,
+                                                     sym.get_text_size(),
+                                                     sym.get_fill(),
+                                                     sym.get_halo_radius(),
+                                                     sym.get_halo_fill()
+                                        );
+                                    if (writer.first) {
+                                        writer.first->add_box(box2d<double>(px,py,px+w,py+h), feature, t_, writer.second);
+                                        writer.first->add_text(text_placement, faces, feature, t_, writer.second); //Only 1 placement
+                                    }
+                                    detector_.insert(label_ext);
+                                }
                             }
-                        }
 
-                        finder.update_detector(text_placement);
+                            finder.update_detector(text_placement);
+                        }
                     }
-                    else if (geom.num_points() > 1 && sym.get_label_placement() == LINE_PLACEMENT) 
+                    else if (geom.num_points() > 1 && how_placed == LINE_PLACEMENT)
                     {
                         placement text_placement(info, sym, 1.0, w, h, true);
 
                         text_placement.avoid_edges = sym.get_avoid_edges();
                         finder.find_point_placements<path_type>(text_placement, path);
 
+                        position const&  pos = sym.get_displacement();
                         for (unsigned int ii = 0; ii < text_placement.placements.size(); ++ ii)
                         {
                             double x = text_placement.placements[ii].starting_x;
                             double y = text_placement.placements[ii].starting_y;
-                            int px = int(x - (w/2));
-                            int py = int(y - (h/2));
+                            double lx = x - boost::get<0>(pos);
+                            double ly = y - boost::get<1>(pos);
+                            int px=int(floor(lx - (0.5*w)));
+                            int py=int(floor(ly - (0.5*h)));
 
-                            if (data)
-                            {
-                                context.add_image(px, py, *(*data), sym.get_opacity());
-                            }
-                            else if (marker)
-                            {
-                                coord<double,2> c = bbox.center();
-                                agg::trans_affine recenter = agg::trans_affine_translation(-c.x,-c.y);
+                            render_marker(x,y,**marker, tr, sym.get_opacity());
 
-                                agg::trans_affine tr;
-                                boost::array<double,6> const& m = sym.get_transform();
-                                tr.load_from(&m[0]);
-                                tr = recenter * tr;
-                                tr *= agg::trans_affine_translation(x, y);
-
-                                vertex_stl_adapter<svg_path_storage> stl_storage((*marker)->source());
-                                svg_path_adapter svg_path(stl_storage);
-                                render_svg_marker_to_cairo(context, *marker, tr, sym.get_opacity());
-                            }
                             context.add_text(text_placement.placements[ii],
                                              face_manager_,
                                              faces,
@@ -1152,14 +1149,14 @@ void cairo_renderer_base::process(line_pattern_symbolizer const& sym,
     typedef coord_transform2<CoordTransform,geometry_type> path_type;
     
     std::string filename = path_processor_type::evaluate( *sym.get_filename(), feature);
-    boost::optional<mapnik::image_ptr> image = mapnik::image_cache::instance()->find(filename,true);
-    if (!image) return;
+    boost::optional<mapnik::marker_ptr> marker = mapnik::marker_cache::instance()->find(filename,true);
+    if (!marker && !(*marker)->is_bitmap()) return;
     
-    unsigned width((*image)->width());
-    unsigned height((*image)->height());
+    unsigned width((*marker)->width());
+    unsigned height((*marker)->height());
 
     cairo_context context(context_);
-    cairo_pattern pattern(*(*image));
+    cairo_pattern pattern(**((*marker)->get_bitmap_data()));
 
     pattern.set_extend(Cairo::EXTEND_REPEAT);
     pattern.set_filter(Cairo::FILTER_BILINEAR);
@@ -1222,11 +1219,10 @@ void cairo_renderer_base::process(polygon_pattern_symbolizer const& sym,
 
     cairo_context context(context_);
     std::string filename = path_processor_type::evaluate( *sym.get_filename(), feature);
-    boost::optional<mapnik::image_ptr> image = mapnik::image_cache::instance()->find(filename,true);
+    boost::optional<mapnik::marker_ptr> marker = mapnik::marker_cache::instance()->find(filename,true);
+    if (!marker && !(*marker)->is_bitmap()) return;
 
-    if (!image) return;
-
-    cairo_pattern pattern(*(*image));
+    cairo_pattern pattern(**((*marker)->get_bitmap_data()));
 
     pattern.set_extend(Cairo::EXTEND_REPEAT);
 

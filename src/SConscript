@@ -105,7 +105,6 @@ source = Split(
     font_engine_freetype.cpp
     font_set.cpp
     graphics.cpp
-    image_cache.cpp
     image_reader.cpp
     image_util.cpp
     layer.cpp

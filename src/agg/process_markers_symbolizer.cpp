@@ -24,8 +24,7 @@
 #include <mapnik/agg_renderer.hpp>
 #include <mapnik/agg_rasterizer.hpp>
 #include <mapnik/image_util.hpp>
-#include <mapnik/image_cache.hpp>
-#include <mapnik/svg/marker_cache.hpp>
+#include <mapnik/marker_cache.hpp>
 #include <mapnik/svg/svg_renderer.hpp>
 #include <mapnik/svg/svg_path_adapter.hpp>
 #include <mapnik/markers_placement.hpp>
@@ -73,6 +72,7 @@ void agg_renderer<T>::process(markers_symbolizer const& sym,
     
     if (!filename.empty())
     {
+        /*
         boost::optional<path_ptr> marker = mapnik::marker_cache::instance()->find(filename, true);
         if (marker && *marker)
         {
@@ -117,7 +117,7 @@ void agg_renderer<T>::process(markers_symbolizer const& sym,
                         std::clog << "### Warning metawriter not yet supported for LINE placement\n";
                 }
             }
-        }
+        }*/
     }
     else // FIXME: should default marker be stored in marker_cache ???
     {
