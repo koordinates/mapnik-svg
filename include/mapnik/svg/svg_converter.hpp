@@ -201,6 +201,12 @@ public:
         attr.fill_color.opacity(a * f.opacity()); 
         attr.fill_flag = true;
     }
+
+    void add_gradient(mapnik::gradient& grad)
+    {
+        path_attributes& attr = cur_attr();
+        attr.gradient = grad;
+    }
     
     void stroke(const agg::rgba8& s)
     {
@@ -234,6 +240,7 @@ public:
     {
         cur_attr().fill_color.opacity(op);
     }
+    
     void stroke_opacity(double op)
     {
         cur_attr().stroke_color.opacity(op);

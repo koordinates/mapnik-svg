@@ -51,6 +51,9 @@ private:
     void parse_rect(xmlTextReaderPtr reader);
     void parse_circle(xmlTextReaderPtr reader);
     void parse_ellipse(xmlTextReaderPtr reader);
+    void parse_linear_gradient(xmlTextReaderPtr reader);
+    void parse_radial_gradient(xmlTextReaderPtr reader);
+    void parse_pattern(xmlTextReaderPtr reader);
     void parse_attr(xmlTextReaderPtr reader);
     void parse_attr(const xmlChar * name, const xmlChar * value );
     

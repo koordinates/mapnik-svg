@@ -24,6 +24,7 @@
 #define MAPNIK_SVG_RENDERER_HPP
 
 #include <mapnik/svg/svg_path_attributes.hpp>
+#include <mapnik/gradient.hpp>
 
 #include <boost/utility.hpp>
 
@@ -37,6 +38,23 @@
 #include "agg_bounding_rect.h"
 #include "agg_rasterizer_scanline_aa.h"
 
+
+#include "agg_rendering_buffer.h"
+#include "agg_rasterizer_scanline_aa.h"
+#include "agg_scanline_u.h"
+#include "agg_scanline_p.h"
+#include "agg_renderer_scanline.h"
+#include "agg_span_allocator.h"
+#include "agg_span_gradient.h"
+#include "agg_gradient_lut.h"
+#include "agg_gamma_lut.h"
+#include "agg_span_interpolator_linear.h"
+#include "agg_pixfmt_rgba.h"
+#include "agg_path_storage.h"
+#include "agg_ellipse.h"
+
+#include <boost/foreach.hpp>
+
 namespace mapnik  {
 namespace svg {
 
@@ -48,6 +66,9 @@ class svg_renderer : boost::noncopyable
     typedef agg::conv_transform<curved_stroked_type> curved_stroked_trans_type;    
     typedef agg::conv_transform<curved_type>         curved_trans_type;
     typedef agg::conv_contour<curved_trans_type>     curved_trans_contour_type;
+    typedef agg::pixfmt_rgba32_plain pixfmt;
+    typedef agg::renderer_base<pixfmt> renderer_base;
+    typedef agg::renderer_scanline_aa_solid<renderer_base> renderer_solid;
     
 public:
     svg_renderer(VertexSource & source, AttributeSource const& attributes)
@@ -85,10 +106,10 @@ public:
             
             rgba8 color;
             
-            if(attr.fill_flag)
+            if (attr.fill_flag)
             {
                 ras.reset();
-                ras.filling_rule(attr.even_odd_flag ? fill_even_odd : fill_non_zero);
+                
                 if(fabs(curved_trans_contour.width()) < 0.0001)
                 {
                     ras.add_path(curved_trans, attr.index);
@@ -99,14 +120,64 @@ public:
                     ras.add_path(curved_trans_contour, attr.index);
                 }
 
-                color = attr.fill_color;
-                color.opacity(color.opacity() * attr.opacity * opacity);
-                ren.color(color);
-                render_scanlines(ras, sl, ren);
+                if(true)
+                {
+                    typedef agg::gamma_lut<agg::int8u, agg::int8u> gamma_lut_type;
+                    typedef agg::gradient_radial gradient_adaptor_type;
+                    typedef agg::gradient_lut<agg::color_interpolator<agg::rgba8>, 1024> color_func_type;
+                    typedef agg::span_interpolator_linear<> interpolator_type;
+                    typedef agg::span_allocator<agg::rgba8> span_allocator_type;
+                    typedef agg::span_gradient<agg::rgba8, 
+                                               interpolator_type, 
+                                               gradient_adaptor_type, 
+                                               color_func_type> span_gradient_type;
+                
+                    span_allocator_type             m_alloc;
+                    color_func_type                 m_gradient_lut;
+                    gamma_lut_type                  m_gamma_lut;
+                
+                    m_gradient_lut.remove_all();
+                    BOOST_FOREACH ( mapnik::stop_pair const& st, attr.gradient.get_stop_array() )
+                    {
+                        mapnik::color const& stop_color = st.second;
+                        unsigned r= stop_color.red();
+                        unsigned g= stop_color.green();
+                        unsigned b= stop_color.blue();
+                        unsigned a= stop_color.alpha();
+                        //std::clog << "r: " << r << " g: " << g << " b: " << b << "a: " << a << "\n";
+                        m_gradient_lut.add_color(st.first, agg::rgba8(r, g, b, int(a * attr.opacity * opacity)));
+                    }
+                    m_gradient_lut.build_lut();
+
+                    double radius = 30;
+
+                    gradient_adaptor_type gradient_adaptor;
+                    
+                    transform.invert();
+                    interpolator_type     span_interpolator(transform);
+                    span_gradient_type    span_gradient(span_interpolator, 
+                                                      gradient_adaptor, 
+                                                      m_gradient_lut, 
+                                                      0, radius);
+                                    
+                    render_scanlines_aa(ras, sl, ren, m_alloc, span_gradient);
+               
+                }
+                else
+                {
+                    ras.filling_rule(attr.even_odd_flag ? fill_even_odd : fill_non_zero);
+                    color = attr.fill_color;
+                    color.opacity(color.opacity() * attr.opacity * opacity);
+                    renderer_solid ren_s(ren);
+                    ren_s.color(color);
+                    render_scanlines(ras, sl, ren_s);
+                }
             }
 
+            
             if(attr.stroke_flag)
             {
+                std::clog << "stroking\n";
                 curved_stroked_.width(attr.stroke_width);
                 //m_curved_stroked.line_join((attr.line_join == miter_join) ? miter_join_round : attr.line_join);
                 curved_stroked_.line_join(attr.line_join);
@@ -127,8 +198,9 @@ public:
                 ras.add_path(curved_stroked_trans, attr.index);
                 color = attr.stroke_color;
                 color.opacity(color.opacity() * attr.opacity * opacity);
-                ren.color(color);
-                render_scanlines(ras, sl, ren);
+                renderer_solid ren_s(ren);
+                ren_s.color(color);
+                render_scanlines(ras, sl, ren_s);
             }
         }
     }

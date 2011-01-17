@@ -47,9 +47,8 @@ void agg_renderer<T>::render_marker(const int x, const int y, marker &marker, co
 {
     if (marker.is_vector())
     {
-        typedef agg::pixfmt_rgba32 pixfmt;
+        typedef agg::pixfmt_rgba32_plain pixfmt;
         typedef agg::renderer_base<pixfmt> renderer_base;
-        typedef agg::renderer_scanline_aa_solid<renderer_base> renderer_solid;
 
         ras_ptr->reset();
         ras_ptr->gamma(agg::gamma_linear());
@@ -57,7 +56,6 @@ void agg_renderer<T>::render_marker(const int x, const int y, marker &marker, co
         agg::rendering_buffer buf(pixmap_.raw_data(), width_, height_, width_ * 4);
         pixfmt pixf(buf);
         renderer_base renb(pixf);
-        renderer_solid ren(renb);
 
         box2d<double> const& bbox = (*marker.get_vector_data())->bounding_box();
         double x1 = bbox.minx();
@@ -76,7 +74,7 @@ void agg_renderer<T>::render_marker(const int x, const int y, marker &marker, co
         mtx *= agg::trans_affine_scaling(scale_factor_);
         mtx *= agg::trans_affine_translation(x, y);
 
-        svg_renderer.render(*ras_ptr, sl, ren, mtx, opacity);
+        svg_renderer.render(*ras_ptr, sl, renb, mtx, opacity);
 
 
     }

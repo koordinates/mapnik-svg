@@ -27,10 +27,13 @@
 
 #include "agg_ellipse.h"
 #include "agg_rounded_rect.h"
+#include "agg_span_gradient.h"
 
 #include <boost/spirit/include/qi.hpp>
 #include <boost/fusion/include/std_pair.hpp>
 #include <boost/foreach.hpp>
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/lexical_cast.hpp>
 
 #include <iostream>
 #include <string>
@@ -39,6 +42,8 @@
 
 namespace mapnik { namespace svg {
 
+
+typedef std::vector<std::pair<double, agg::rgba8> > color_lookup_type;
 
 namespace qi = boost::spirit::qi;
 
@@ -179,6 +184,22 @@ void svg_parser::start_element(xmlTextReaderPtr reader)
     {
         parse_ellipse(reader);
     }
+    else if (!is_defs_ && xmlStrEqual(name, BAD_CAST "linearGradient"))
+    {
+        parse_linear_gradient(reader);
+    }
+    else if (!is_defs_ && xmlStrEqual(name, BAD_CAST "radialGradient"))
+    {
+        parse_radial_gradient(reader);
+    }
+    else if (!is_defs_ && xmlStrEqual(name, BAD_CAST "pattern"))
+    {
+        parse_pattern(reader);
+    }
+    else
+    {
+        std::clog << "unhandled element: " << name << "\n";
+    }
 }
 
 void svg_parser::end_element(xmlTextReaderPtr reader)
@@ -211,7 +232,24 @@ void svg_parser::parse_attr(const xmlChar * name, const xmlChar * value )
         }
         else
         {
-            path_.fill(parse_color((const char*) value));
+            if (true)//boost::starts_with((const char*)value, "url("))
+            {
+                //replace_first(val, "url", "Jane");
+                std::clog << "found url: " << value << "\n";
+                //path_.fill(parse_color("red"));
+                mapnik::gradient grad = mapnik::gradient();
+
+                grad.add_stop(0.0, mapnik::color("rgb(168, 251, 121)"));
+                grad.add_stop(0.25, mapnik::color("rgb(245, 254, 97)"));
+                grad.add_stop(0.5, mapnik::color("rgb(254, 59, 16)"));
+                grad.add_stop(1.0, mapnik::color("rgb(254, 19, 243)"));
+                //path_.fill(parse_color("red"));
+                path_.add_gradient(grad);
+            }
+            else
+            {
+                path_.fill(parse_color((const char*) value));
+            }
         }
     }
     else if (xmlStrEqual(name, BAD_CAST "fill-opacity"))
@@ -522,6 +560,24 @@ void svg_parser::parse_rect(xmlTextReaderPtr reader)
         }
         path_.end_path();
     }
+}
+
+
+void svg_parser::parse_radial_gradient(xmlTextReaderPtr reader)
+{
+    // cx cy r gradientTransform="matrix(1 0 0 1 0 -23)" gradientUnits="userSpaceOnUse"
+    //const xmlChar *value;
+
+}
+
+void svg_parser::parse_linear_gradient(xmlTextReaderPtr reader)
+{
+    //const xmlChar *value;
+}
+
+void svg_parser::parse_pattern(xmlTextReaderPtr reader)
+{
+    //const xmlChar *value;
 }
 
 }}

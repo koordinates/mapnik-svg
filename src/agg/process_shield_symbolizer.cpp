@@ -31,8 +31,6 @@
 
 #include "agg_basics.h"
 #include "agg_rendering_buffer.h"
-#include "agg_pixfmt_rgba.h"
-#include "agg_rasterizer_scanline_aa.h"
 #include "agg_scanline_u.h"
 
 namespace mapnik {
@@ -43,9 +41,6 @@ void  agg_renderer<T>::process(shield_symbolizer const& sym,
                                proj_transform const& prj_trans)
 {
     typedef  coord_transform2<CoordTransform,geometry_type> path_type;
-    typedef agg::pixfmt_rgba32 pixfmt;
-    typedef agg::renderer_base<pixfmt> renderer_base;
-    typedef agg::renderer_scanline_aa_solid<renderer_base> renderer_solid;
 
     UnicodeString text;
     if( sym.get_no_text() )

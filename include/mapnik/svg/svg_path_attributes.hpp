@@ -30,6 +30,8 @@
 #include "agg_pixfmt_rgba.h"
 #include "agg_trans_affine.h"
 
+#include <mapnik/gradient.hpp>
+
 namespace mapnik {
 namespace svg {
 
@@ -47,6 +49,7 @@ struct path_attributes
     double       miter_limit;
     double       stroke_width;
     agg::trans_affine transform;
+    mapnik::gradient gradient;
     
     // Empty constructor
     path_attributes() :
@@ -61,7 +64,8 @@ struct path_attributes
         line_cap(agg::butt_cap),
         miter_limit(4.0),
         stroke_width(1.0),
-        transform()
+        transform(),
+        gradient()
     {
     }
 
@@ -78,7 +82,8 @@ struct path_attributes
           line_cap(attr.line_cap),
           miter_limit(attr.miter_limit),
           stroke_width(attr.stroke_width),
-          transform(attr.transform) {}
+          transform(attr.transform),
+          gradient(attr.gradient) {}
 
     // Copy constructor with new index value
     path_attributes(path_attributes const& attr, unsigned idx) 
@@ -93,7 +98,8 @@ struct path_attributes
           line_cap(attr.line_cap),
           miter_limit(attr.miter_limit),
           stroke_width(attr.stroke_width),
-          transform(attr.transform) {}
+          transform(attr.transform),
+          gradient(attr.gradient) {}
 };
 
 }}
