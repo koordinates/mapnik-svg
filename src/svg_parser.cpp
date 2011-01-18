@@ -246,7 +246,6 @@ void svg_parser::parse_attr(const xmlChar * name, const xmlChar * value )
             id.erase(id.end()-1);
             if (gradient_map_.count(id) > 0)
             {
-                std::cerr << "Found gradient fill: " << id << std::endl;
                 path_.add_gradient(gradient_map_[id]);
             }
             else

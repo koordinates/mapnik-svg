@@ -58,6 +58,47 @@
 namespace mapnik  {
 namespace svg {
 
+
+/**
+ * Arbitrary linear gradient specified by two control points. Gradient
+ * value is taken as the normalised distance along the line segment
+ * represented by the two points.
+ */
+class linear_gradient_from_segment
+{
+public:
+    linear_gradient_from_segment(double x1, double y1, double x2, double y2) :
+        x1_(x1*agg::gradient_subpixel_scale),
+        y1_(y1*agg::gradient_subpixel_scale),
+        x2_(x2*agg::gradient_subpixel_scale),
+        y2_(y2*agg::gradient_subpixel_scale)
+    {
+        double dx = x2_-x1_;
+        double dy = y2_-y1_;
+        length_sqr_ = dx*dx+dy*dy;
+    }
+
+    int calculate(int x, int y, int d) const
+    {
+        if (length_sqr_ <= 0)
+            return 0;
+        double u = ((x-x1_)*(x2_-x1_) + (y-y1_)*(y2_-y1_))/length_sqr_;
+        if (u < 0)
+            u = 0;
+        else if (u > 1)
+            u = 1;
+        return u*d;
+    }
+private:
+    double x1_;
+    double y1_;
+    double x2_;
+    double y2_;
+
+    double length_sqr_;
+
+};
+
 template <typename VertexSource, typename AttributeSource> 
 class svg_renderer : boost::noncopyable
 {
@@ -123,21 +164,16 @@ public:
                 if(attr.gradient.get_gradient_type() != NO_GRADIENT)
                 {
                     typedef agg::gamma_lut<agg::int8u, agg::int8u> gamma_lut_type;
-                    typedef agg::gradient_radial gradient_adaptor_type;
                     typedef agg::gradient_lut<agg::color_interpolator<agg::rgba8>, 1024> color_func_type;
                     typedef agg::span_interpolator_linear<> interpolator_type;
                     typedef agg::span_allocator<agg::rgba8> span_allocator_type;
-                    typedef agg::span_gradient<agg::rgba8, 
-                                               interpolator_type, 
-                                               gradient_adaptor_type, 
-                                               color_func_type> span_gradient_type;
                 
                     span_allocator_type             m_alloc;
                     color_func_type                 m_gradient_lut;
                     gamma_lut_type                  m_gamma_lut;
                 
                     double x1,x2,y1,y2,radius;
-                    attr.gradient.get_control_points(x1,x2,y1,y2,radius);
+                    attr.gradient.get_control_points(x1,y1,x2,y2,radius);
 
                     m_gradient_lut.remove_all();
                     BOOST_FOREACH ( mapnik::stop_pair const& st, attr.gradient.get_stop_array() )
@@ -152,16 +188,42 @@ public:
                     }
                     m_gradient_lut.build_lut();
 
-                    gradient_adaptor_type gradient_adaptor;
-                    
                     transform.invert();
                     interpolator_type     span_interpolator(transform);
-                    span_gradient_type    span_gradient(span_interpolator, 
-                                                      gradient_adaptor, 
-                                                      m_gradient_lut, 
-                                                      0, radius);
-                                    
-                    render_scanlines_aa(ras, sl, ren, m_alloc, span_gradient);
+                    if (attr.gradient.get_gradient_type() == RADIAL)
+                    {
+                        typedef agg::gradient_radial_focus gradient_adaptor_type;
+                        typedef agg::span_gradient<agg::rgba8,
+                                                   interpolator_type,
+                                                   gradient_adaptor_type,
+                                                   color_func_type> span_gradient_type;
+
+                        gradient_adaptor_type gradient_adaptor(radius,0,0);//x1,y1);
+
+                        span_gradient_type    span_gradient(span_interpolator,
+                                                          gradient_adaptor,
+                                                          m_gradient_lut,
+                                                          0, radius);
+
+                        render_scanlines_aa(ras, sl, ren, m_alloc, span_gradient);
+                    }
+                    else
+                    {
+                        typedef linear_gradient_from_segment gradient_adaptor_type;
+                        typedef agg::span_gradient<agg::rgba8,
+                                                   interpolator_type,
+                                                   gradient_adaptor_type,
+                                                   color_func_type> span_gradient_type;
+
+                        gradient_adaptor_type gradient_adaptor(x1,y1,x2,y2);
+
+                        span_gradient_type    span_gradient(span_interpolator,
+                                                          gradient_adaptor,
+                                                          m_gradient_lut,
+                                                          0, 255);
+
+                        render_scanlines_aa(ras, sl, ren, m_alloc, span_gradient);
+                    }
                
                 }
                 else
