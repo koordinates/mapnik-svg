@@ -590,7 +590,6 @@ void svg_parser::parse_gradient_stop(xmlTextReaderPtr reader)
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "style");
     if (value)
     {
-        std::cerr << "Style: " << value << std::endl;
         typedef std::vector<std::pair<std::string,std::string> > cont_type;
         typedef cont_type::value_type value_type;
         cont_type vec;
@@ -598,11 +597,8 @@ void svg_parser::parse_gradient_stop(xmlTextReaderPtr reader)
 
         BOOST_FOREACH(value_type kv , vec )
         {
-            std::cerr << "StylePart: " << kv.first << std::endl;
             if (kv.first == "stop-color")
             {
-                std::cerr << "StopColour" << kv.second << std::endl;
-
                 try
                 {
                     mapnik::color_factory::init_from_string(stop_color,kv.second.c_str());
@@ -674,6 +670,7 @@ void svg_parser::parse_radial_gradient(xmlTextReaderPtr reader)
     gradient new_grad;
     temporary_gradient_ = std::make_pair(id, new_grad);
     temporary_gradient_.second.set_gradient_type(RADIAL);
+    temporary_gradient_.second.set_control_points(fx,fy,cx,cy,r);
 
     std::cerr << "Found Radial Gradient: " << id << " " << cx << " " << cy << " " << fx << " " << fy << " " << r << " " << offset << std::endl;
 }
@@ -705,6 +702,8 @@ void svg_parser::parse_linear_gradient(xmlTextReaderPtr reader)
     gradient new_grad;
     temporary_gradient_ = std::make_pair(id, new_grad);
     temporary_gradient_.second.set_gradient_type(LINEAR);
+    temporary_gradient_.second.set_control_points(x1,y1,x2,y2);
+
 
     std::cerr << "Found Linear Gradient: " << id << "(" << x1 << " " << y1 << "),(" << x2 << " " << y2 << ")" << std::endl;
 

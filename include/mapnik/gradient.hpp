@@ -59,6 +59,13 @@ class MAPNIK_DECL gradient
 {       
     gradient_e gradient_type_;
     stop_array stops_;
+    // control points for the gradient, x1/y1 is the start point, x2/y2 the stop point.
+    double x1_;
+    double y1_;
+    double x2_;
+    double y2_;
+    // for radial gradients r specifies the radius of the stop circle centered on x2/y2
+    double r_;
 public:
     explicit gradient();
     gradient(gradient const& other);
@@ -71,7 +78,11 @@ public:
     bool has_stop() const;
     
     stop_array const& get_stop_array() const;
-        
+
+    void set_control_points(double x1, double y1, double x2, double y2, double r=0);
+    void get_control_points(double &x1, double &y1, double &x2, double &y2, double &r) const;
+    void get_control_points(double &x1, double &y1, double &x2, double &y2) const;
+
 private:
     void swap(const gradient& other) throw();
 };

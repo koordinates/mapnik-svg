@@ -136,6 +136,9 @@ public:
                     color_func_type                 m_gradient_lut;
                     gamma_lut_type                  m_gamma_lut;
                 
+                    double x1,x2,y1,y2,radius;
+                    attr.gradient.get_control_points(x1,x2,y1,y2,radius);
+
                     m_gradient_lut.remove_all();
                     BOOST_FOREACH ( mapnik::stop_pair const& st, attr.gradient.get_stop_array() )
                     {
@@ -144,12 +147,10 @@ public:
                         unsigned g= stop_color.green();
                         unsigned b= stop_color.blue();
                         unsigned a= stop_color.alpha();
-                        std::clog << "r: " << r << " g: " << g << " b: " << b << "a: " << a << "\n";
+                        //std::clog << "r: " << r << " g: " << g << " b: " << b << "a: " << a << "\n";
                         m_gradient_lut.add_color(st.first, agg::rgba8(r, g, b, int(a * attr.opacity * opacity)));
                     }
                     m_gradient_lut.build_lut();
-
-                    double radius = 30;
 
                     gradient_adaptor_type gradient_adaptor;
                     

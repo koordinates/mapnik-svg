@@ -47,11 +47,23 @@ IMPLEMENT_ENUM( gradient_e, gradient_strings );
 
 gradient::gradient() 
     : gradient_type_(NO_GRADIENT),
-      stops_() {}
+      stops_(),
+      x1_(0),
+      y1_(0),
+      x2_(0),
+      y2_(0),
+      r_(0)
+{}
 
 gradient::gradient(gradient const& other)
     : gradient_type_(other.gradient_type_),
-      stops_(other.stops_) {}
+      stops_(other.stops_),
+      x1_(other.x1_),
+      y1_(other.y1_),
+      x2_(other.x2_),
+      y2_(other.y2_),
+      r_(other.r_)
+{}
 
 gradient & gradient::operator=(const gradient& rhs)
 {
@@ -89,5 +101,28 @@ void gradient::swap(const gradient& other) throw()
 {
     gradient_type_=other.gradient_type_;
     stops_=other.stops_;
+    other.get_control_points(x1_,y1_,x2_,y2_,r_);
 }
+
+void gradient::set_control_points(double x1, double y1, double x2, double y2, double r)
+{
+    x1_ = x1;
+    y1_ = y1;
+    x2_ = x2;
+    y2_ = y2;
+    r_ = r;
+}
+inline void gradient::get_control_points(double &x1, double &y1, double &x2, double &y2, double &r) const
+{
+    get_control_points(x1,y1,x2,y2);
+    r=r_;
+}
+inline void gradient::get_control_points(double &x1, double &y1, double &x2, double &y2) const
+{
+    x1 = x1_;
+    y1 = y1_;
+    x2 = x2_;
+    y2 = y2_;
+}
+
 }
