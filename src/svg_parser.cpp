@@ -184,6 +184,8 @@ void svg_parser::start_element(xmlTextReaderPtr reader)
     {
         parse_ellipse(reader);
     }
+    // the gradient tags *should* be in defs, but illustrator seems not to put them in there so
+    // accept them anywhere
     else if (xmlStrEqual(name, BAD_CAST "linearGradient"))
     {
         parse_linear_gradient(reader);
@@ -192,7 +194,7 @@ void svg_parser::start_element(xmlTextReaderPtr reader)
     {
         parse_radial_gradient(reader);
     }
-    else if (is_defs_ && xmlStrEqual(name, BAD_CAST "stop"))
+    else if (xmlStrEqual(name, BAD_CAST "stop"))
     {
         parse_gradient_stop(reader);
     }
@@ -456,9 +458,6 @@ void svg_parser::parse_circle(xmlTextReaderPtr reader)
     if(r != 0.0)
     {
         if(r < 0.0) throw std::runtime_error("parse_circle: Invalid radius");
-        //path_.move_to(cx+r,cy);
-        //path_.arc_to(r,r,0,1,0,cx-r,cy);
-        //path_.arc_to(r,r,0,1,0,cx+r,cy);
         agg::ellipse c(cx, cy, r, r);
         path_.storage().concat_path(c);
     }
@@ -490,9 +489,6 @@ void svg_parser::parse_ellipse(xmlTextReaderPtr reader)
     {
         if(rx < 0.0) throw std::runtime_error("parse_ellipse: Invalid rx");
         if(ry < 0.0) throw std::runtime_error("parse_ellipse: Invalid ry");
-        //path_.move_to(cx+rx,cy);
-        //path_.arc_to(rx,ry,0,1,0,cx-rx,cy);
-        //path_.arc_to(rx,ry,0,1,0,cx+rx,cy);
         agg::ellipse c(cx, cy, rx, ry);
         path_.storage().concat_path(c);
     }
@@ -592,7 +588,7 @@ void svg_parser::parse_gradient_stop(xmlTextReaderPtr reader)
 
     double offset = 0.0;
     mapnik::color stop_color;
-    double opacity = 0.0;
+    double opacity = 1.0;
 
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "offset");
     if (value) offset = parse_double((const char*)value);
@@ -624,6 +620,26 @@ void svg_parser::parse_gradient_stop(xmlTextReaderPtr reader)
             }
         }
     }
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "stop-color");
+    if (value)
+    {
+        try
+        {
+            mapnik::color_factory::init_from_string(stop_color,(const char *) value);
+        }
+        catch (mapnik::config_error & ex)
+        {
+            std::cerr << ex.what() << std::endl;
+        }
+    }
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "stop-opacity");
+    if (value)
+    {
+        opacity = parse_double((const char *) value);
+    }
+
 
     stop_color.set_alpha(opacity*255);
 
@@ -721,10 +737,16 @@ void svg_parser::parse_radial_gradient(xmlTextReaderPtr reader)
     if (value) cy = parse_double((const char*)value);
 
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "fx");
-    if (value) fx = parse_double((const char*)value);
+    if (value)
+        fx = parse_double((const char*)value);
+    else
+        fx = cx;
 
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "fy");
-    if (value) fy = parse_double((const char*)value);
+    if (value)
+        fy = parse_double((const char*)value);
+    else
+        fy = cy;
 
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "offset");
     if (value) offset = parse_double((const char*)value);
