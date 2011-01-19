@@ -202,12 +202,18 @@ public:
         attr.fill_flag = true;
     }
 
-    void add_gradient(mapnik::gradient& grad)
+    void add_fill_gradient(mapnik::gradient& grad)
     {
         path_attributes& attr = cur_attr();
-        attr.gradient = grad;
+        attr.fill_gradient = grad;
     }
-    
+
+    void add_stroke_gradient(mapnik::gradient& grad)
+    {
+        path_attributes& attr = cur_attr();
+        attr.stroke_gradient = grad;
+    }
+
     void stroke(const agg::rgba8& s)
     {
         path_attributes& attr = cur_attr();

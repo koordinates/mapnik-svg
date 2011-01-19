@@ -192,10 +192,6 @@ void svg_parser::start_element(xmlTextReaderPtr reader)
     {
         parse_radial_gradient(reader);
     }
-    else if (xmlStrEqual(name, BAD_CAST "radialGradient"))
-    {
-        parse_radial_gradient(reader);
-    }
     else if (is_defs_ && xmlStrEqual(name, BAD_CAST "stop"))
     {
         parse_gradient_stop(reader);
@@ -220,7 +216,6 @@ void svg_parser::end_element(xmlTextReaderPtr reader)
     }
     else if ((xmlStrEqual(name, BAD_CAST "linearGradient")) || (xmlStrEqual(name, BAD_CAST "radialGradient")))
     {
-        std::cerr << "Adding gradient to map " << temporary_gradient_.first << std::endl;
         gradient_map_[temporary_gradient_.first] = temporary_gradient_.second;
     }
 }
@@ -247,7 +242,7 @@ void svg_parser::parse_attr(const xmlChar * name, const xmlChar * value )
             id.erase(id.end()-1);
             if (gradient_map_.count(id) > 0)
             {
-                path_.add_gradient(gradient_map_[id]);
+                path_.add_fill_gradient(gradient_map_[id]);
             }
             else
             {
@@ -275,6 +270,21 @@ void svg_parser::parse_attr(const xmlChar * name, const xmlChar * value )
         if (xmlStrEqual(value, BAD_CAST "none"))
         {
             path_.stroke_none();
+        }
+        else if (boost::starts_with((const char*)value, "url(#"))
+        {
+            // see if we have a known gradient fill
+            std::string id = std::string((const char*)&value[5]);
+            // get rid of the trailing )
+            id.erase(id.end()-1);
+            if (gradient_map_.count(id) > 0)
+            {
+                path_.add_stroke_gradient(gradient_map_[id]);
+            }
+            else
+            {
+                std::cerr << "Failed to find gradient fill: " << id << std::endl;
+            }
         }
         else
         {
@@ -623,6 +633,62 @@ void svg_parser::parse_gradient_stop(xmlTextReaderPtr reader)
 
 }
 
+bool svg_parser::parse_common_gradient(xmlTextReaderPtr reader)
+{
+    const xmlChar *value;
+
+    std::string id;
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "id");
+    if (value)
+    {
+        // start a new gradient
+        gradient new_grad;
+        id = std::string((const char *) value);
+        temporary_gradient_ = std::make_pair(id, new_grad);
+    }
+    else
+    {
+        // no point without an ID
+        return false;
+    }
+
+    // check if we should inherit from another tag
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "xlink:href");
+    if (value && value[0] == '#')
+    {
+        std::string linkid = (const char *) &value[1];
+        if (gradient_map_.count(linkid))
+        {
+            std::cerr << "\tLoading linked gradient properties from " << linkid << std::endl;
+            temporary_gradient_.second = gradient_map_[linkid];
+        }
+        else
+        {
+            std::cerr << "Failed to find linked gradient " << linkid << std::endl;
+        }
+    }
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "gradientUnits");
+    if (value && std::string((const char*) value) == "userSpaceOnUse")
+    {
+        temporary_gradient_.second.set_units(USER_SPACE_ON_USE);
+    }
+    else
+    {
+        std::cerr << "Unsupported gradient units specified" << std::endl;
+    }
+
+    value = xmlTextReaderGetAttribute(reader, BAD_CAST "gradientTransform");
+    if (value)
+    {
+        agg::trans_affine tr;
+        mapnik::svg::parse_transform((const char*) value,tr);
+        temporary_gradient_.second.set_transform(tr);
+    }
+
+    return true;
+}
+
 /**
  *         <radialGradient
        collect="always"
@@ -637,6 +703,9 @@ void svg_parser::parse_gradient_stop(xmlTextReaderPtr reader)
  */
 void svg_parser::parse_radial_gradient(xmlTextReaderPtr reader)
 {
+    if (!parse_common_gradient(reader))
+        return;
+
     const xmlChar *value;
     double cx = 0.0;
     double cy = 0.0;
@@ -644,37 +713,6 @@ void svg_parser::parse_radial_gradient(xmlTextReaderPtr reader)
     double fy = 0.0;
     double r = 0.0;
     double offset = 0.0;
-
-    std::string id;
-    value = xmlTextReaderGetAttribute(reader, BAD_CAST "id");
-    if (value)
-    {
-        // start a new gradient
-        gradient new_grad;
-        id = std::string((const char *) value);
-        temporary_gradient_ = std::make_pair(id, new_grad);
-    }
-    else
-    {
-        // no point without an ID
-        return;
-    }
-
-    // check if we should inherit from another tag
-    value = xmlTextReaderGetAttribute(reader, BAD_CAST "xlink:href");
-    if (value && value[0] == '#')
-    {
-        std::string linkid = (const char *) &value[1];
-        if (gradient_map_.count(linkid))
-        {
-            std::cerr << "Loading linked gradient properties from " << linkid << std::endl;
-            temporary_gradient_.second = gradient_map_[linkid];
-        }
-        else
-        {
-            std::cerr << "Failed to find linked gradient " << linkid << std::endl;
-        }
-    }
 
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "cx");
     if (value) cx = parse_double((const char*)value);
@@ -699,48 +737,19 @@ void svg_parser::parse_radial_gradient(xmlTextReaderPtr reader)
     // add this here in case we have no end tag, will be replaced if we do
     gradient_map_[temporary_gradient_.first] = temporary_gradient_.second;
 
-    std::cerr << "Found Radial Gradient: " << id << " " << cx << " " << cy << " " << fx << " " << fy << " " << r << " " << offset << std::endl;
+    std::cerr << "Found Radial Gradient: " << " " << cx << " " << cy << " " << fx << " " << fy << " " << r << " " << offset << std::endl;
 }
 
 void svg_parser::parse_linear_gradient(xmlTextReaderPtr reader)
 {
+    if (!parse_common_gradient(reader))
+        return;
+
     const xmlChar *value;
     double x1 = 0.0;
     double x2 = 0.0;
     double y1 = 0.0;
     double y2 = 0.0;
-
-    std::string id;
-    value = xmlTextReaderGetAttribute(reader, BAD_CAST "id");
-    if (value)
-    {
-        // start a new gradient
-        gradient new_grad;
-        id = std::string((const char *) value);
-        temporary_gradient_ = std::make_pair(id, new_grad);
-    }
-    else
-    {
-        // no point without an ID
-        return;
-    }
-
-    // check if we should inherit from another tag
-    value = xmlTextReaderGetAttribute(reader, BAD_CAST "xlink:href");
-    if (value && value[0] == '#')
-    {
-        std::string linkid = (const char *) &value[1];
-        if (gradient_map_.count(linkid))
-        {
-            std::cerr << "Loading linked gradient properties from " << linkid << std::endl;
-            temporary_gradient_.second = gradient_map_[linkid];
-        }
-        else
-        {
-            std::cerr << "Failed to find linked gradient " << linkid << std::endl;
-        }
-
-    }
 
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "x1");
     if (value) x1 = parse_double((const char*)value);
@@ -759,7 +768,7 @@ void svg_parser::parse_linear_gradient(xmlTextReaderPtr reader)
     // add this here in case we have no end tag, will be replaced if we do
     gradient_map_[temporary_gradient_.first] = temporary_gradient_.second;
 
-    std::cerr << "Found Linear Gradient: " << id << "(" << x1 << " " << y1 << "),(" << x2 << " " << y2 << ")" << std::endl;
+    std::cerr << "Found Linear Gradient: " << "(" << x1 << " " << y1 << "),(" << x2 << " " << y2 << ")" << std::endl;
 }
 
 void svg_parser::parse_pattern(xmlTextReaderPtr reader)

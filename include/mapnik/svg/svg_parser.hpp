@@ -57,10 +57,12 @@ private:
     void parse_ellipse(xmlTextReaderPtr reader);
     void parse_linear_gradient(xmlTextReaderPtr reader);
     void parse_radial_gradient(xmlTextReaderPtr reader);
+    bool parse_common_gradient(xmlTextReaderPtr reader);
     void parse_gradient_stop(xmlTextReaderPtr reader);
     void parse_pattern(xmlTextReaderPtr reader);
     void parse_attr(xmlTextReaderPtr reader);
     void parse_attr(const xmlChar * name, const xmlChar * value );
+
     
 private:
     svg_converter_type & path_;

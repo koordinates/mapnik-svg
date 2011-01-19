@@ -24,6 +24,8 @@
 #ifndef GRADIENT_HPP
 #define GRADIENT_HPP
 
+#include <agg_trans_affine.h>
+
 // mapnik
 #include <mapnik/color.hpp>
 #include <mapnik/enumeration.hpp>
@@ -42,19 +44,20 @@ enum gradient_enum
     NO_GRADIENT,
     LINEAR,
     RADIAL,
-    /*"radial_focus",
-    "x",
-    "y",
-    "xy",
-    "sqrt_xy",
-    "diamond",
-    "conic",
-    */
     gradient_enum_MAX
 };
 
 DEFINE_ENUM( gradient_e, gradient_enum );
-    
+
+enum gradient_unit_enum
+{
+    USER_SPACE_ON_USE,
+    OBJECT_BOUNDING_BOX, //  (i.e., the abstract coordinate system where (0,0) is at the top/left of the object bounding box and (1,1) is at the bottom/right of the object bounding box)
+    gradient_unit_enum_MAX
+};
+
+DEFINE_ENUM( gradient_unit_e, gradient_unit_enum );
+
 class MAPNIK_DECL gradient
 {       
     gradient_e gradient_type_;
@@ -66,6 +69,12 @@ class MAPNIK_DECL gradient
     double y2_;
     // for radial gradients r specifies the radius of the stop circle centered on x2/y2
     double r_;
+
+    // units for the coordinates
+    gradient_unit_e units_;
+
+    // transform
+    agg::trans_affine transform_;
 public:
     explicit gradient();
     gradient(gradient const& other);
@@ -73,6 +82,12 @@ public:
 
     void set_gradient_type(gradient_e grad);
     gradient_e get_gradient_type() const;
+
+    void set_transform(agg::trans_affine transform);
+    agg::trans_affine get_transform() const;
+
+    void set_units(gradient_unit_e units);
+    gradient_unit_e get_units() const;
 
     void add_stop(double offset, color const& c);
     bool has_stop() const;

@@ -52,8 +52,10 @@ gradient::gradient()
       y1_(0),
       x2_(0),
       y2_(0),
-      r_(0)
-{}
+      r_(0),
+      units_(USER_SPACE_ON_USE)
+{
+}
 
 gradient::gradient(gradient const& other)
     : gradient_type_(other.gradient_type_),
@@ -62,7 +64,9 @@ gradient::gradient(gradient const& other)
       y1_(other.y1_),
       x2_(other.x2_),
       y2_(other.y2_),
-      r_(other.r_)
+      r_(other.r_),
+      units_(other.units_),
+      transform_(other.transform_)
 {}
 
 gradient & gradient::operator=(const gradient& rhs)
@@ -80,6 +84,24 @@ void gradient::set_gradient_type(gradient_e grad)
 gradient_e gradient::get_gradient_type() const 
 {
     return gradient_type_;
+}
+
+void gradient::set_transform(agg::trans_affine transform)
+{
+    transform_ = transform;
+}
+agg::trans_affine gradient::get_transform() const
+{
+    return transform_;
+}
+
+void gradient::set_units(gradient_unit_e units)
+{
+    units_ = units;
+}
+gradient_unit_e gradient::get_units() const
+{
+    return units_;
 }
 
 void gradient::add_stop(double offset,mapnik::color const& c)
@@ -101,6 +123,8 @@ void gradient::swap(const gradient& other) throw()
 {
     gradient_type_=other.gradient_type_;
     stops_=other.stops_;
+    units_=other.units_;
+    transform_=other.transform_;
     other.get_control_points(x1_,y1_,x2_,y2_,r_);
 }
 

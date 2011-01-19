@@ -49,7 +49,8 @@ struct path_attributes
     double       miter_limit;
     double       stroke_width;
     agg::trans_affine transform;
-    mapnik::gradient gradient;
+    mapnik::gradient fill_gradient;
+    mapnik::gradient stroke_gradient;
     
     // Empty constructor
     path_attributes() :
@@ -65,7 +66,8 @@ struct path_attributes
         miter_limit(4.0),
         stroke_width(1.0),
         transform(),
-        gradient()
+        fill_gradient(),
+        stroke_gradient()
     {
     }
 
@@ -83,7 +85,9 @@ struct path_attributes
           miter_limit(attr.miter_limit),
           stroke_width(attr.stroke_width),
           transform(attr.transform),
-          gradient(attr.gradient) {}
+          fill_gradient(attr.fill_gradient),
+          stroke_gradient(attr.stroke_gradient)
+    {}
 
     // Copy constructor with new index value
     path_attributes(path_attributes const& attr, unsigned idx) 
@@ -99,7 +103,9 @@ struct path_attributes
           miter_limit(attr.miter_limit),
           stroke_width(attr.stroke_width),
           transform(attr.transform),
-          gradient(attr.gradient) {}
+          fill_gradient(attr.fill_gradient),
+          stroke_gradient(attr.stroke_gradient)
+    {}
 };
 
 }}

@@ -130,7 +130,7 @@ private:
 class cairo_gradient : private boost::noncopyable
 {
 public:
-    cairo_gradient(const mapnik::gradient &grad)
+    cairo_gradient(const mapnik::gradient &grad, double opacity=1.0)
     {
         double x1,x2,y1,y2,r;
         grad.get_control_points(x1,y1,x2,y2,r);
@@ -150,8 +150,14 @@ public:
             double g= static_cast<double> (stop_color.green())/255.0;
             double b= static_cast<double> (stop_color.blue())/255.0;
             double a= static_cast<double> (stop_color.alpha())/255.0;
-            pattern_->add_color_stop_rgba(st.first, r, g, b, a);
+            pattern_->add_color_stop_rgba(st.first, r, g, b, a*opacity);
         }
+
+        double m[6];
+        agg::trans_affine tr = grad.get_transform();
+        tr.invert();
+        tr.store_to(m);
+        pattern_->set_matrix(Cairo::Matrix(m[0],m[1],m[2],m[3],m[4],m[5]));
     }
 
     ~cairo_gradient(void)
@@ -908,9 +914,9 @@ void cairo_renderer_base::render_marker(const int x, const int y, marker &marker
             vertex_stl_adapter<svg_path_storage> stl_storage(vmarker->source());
             svg_path_adapter svg_path(stl_storage);
 
-            if(attr.gradient.get_gradient_type() != NO_GRADIENT)
+            if(attr.fill_gradient.get_gradient_type() != NO_GRADIENT)
             {
-                cairo_gradient g(attr.gradient);
+                cairo_gradient g(attr.fill_gradient,attr.opacity*opacity);
                 context.set_gradient(g);
                 context.add_agg_path(svg_path,attr.index);
                 context.fill();
@@ -922,6 +928,17 @@ void cairo_renderer_base::render_marker(const int x, const int y, marker &marker
                 context.fill();
             }
 
+            if(attr.stroke_gradient.get_gradient_type() != NO_GRADIENT)
+            {
+                cairo_gradient g(attr.stroke_gradient,attr.opacity*opacity);
+                context.set_gradient(g);
+                context.set_line_width(attr.stroke_width);
+                context.set_line_cap(line_cap_enum(attr.line_cap));
+                context.set_line_join(line_join_enum(attr.line_join));
+                context.set_miter_limit(attr.miter_limit);
+                context.add_agg_path(svg_path,attr.index);
+                context.stroke();
+            }
             if(attr.stroke_flag)
             {
                 context.set_color(attr.stroke_color.r,attr.stroke_color.g,attr.stroke_color.b,attr.opacity*opacity);
@@ -932,8 +949,6 @@ void cairo_renderer_base::render_marker(const int x, const int y, marker &marker
                 context.add_agg_path(svg_path,attr.index);
                 context.stroke();
             }
-
-
 
             context.restore();
         }
