@@ -189,7 +189,6 @@ public:
                     m_gradient_lut.build_lut();
 
                     transform.invert();
-                    interpolator_type     span_interpolator(transform);
                     if (attr.gradient.get_gradient_type() == RADIAL)
                     {
                         typedef agg::gradient_radial_focus gradient_adaptor_type;
@@ -198,7 +197,10 @@ public:
                                                    gradient_adaptor_type,
                                                    color_func_type> span_gradient_type;
 
-                        gradient_adaptor_type gradient_adaptor(radius,0,0);//x1,y1);
+                        // the agg radial gradient assumes it is centred on 0
+                        transform.translate(-x2,-y2);
+                        interpolator_type     span_interpolator(transform);
+                        gradient_adaptor_type gradient_adaptor(radius,x1-x2,y1-y2);
 
                         span_gradient_type    span_gradient(span_interpolator,
                                                           gradient_adaptor,
@@ -215,6 +217,7 @@ public:
                                                    gradient_adaptor_type,
                                                    color_func_type> span_gradient_type;
 
+                        interpolator_type     span_interpolator(transform);
                         gradient_adaptor_type gradient_adaptor(x1,y1,x2,y2);
 
                         span_gradient_type    span_gradient(span_interpolator,

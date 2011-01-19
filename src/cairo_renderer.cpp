@@ -34,7 +34,6 @@
 #include <mapnik/parse_path.hpp>
 #include <mapnik/marker_cache.hpp>
 #include <mapnik/svg/svg_converter.hpp>
-#include <mapnik/svg/svg_renderer.hpp>
 #include <mapnik/svg/svg_path_adapter.hpp>
 #include <mapnik/svg/svg_path_attributes.hpp>
 
