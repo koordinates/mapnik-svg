@@ -143,6 +143,8 @@ public:
             pattern_ = Cairo::RadialGradient::create(x1, y1, 0, x2, y2, r);
         }
 
+        units_ = grad.get_units();
+
         BOOST_FOREACH ( mapnik::stop_pair const& st, grad.get_stop_array() )
         {
             mapnik::color const& stop_color = st.second;
@@ -157,6 +159,7 @@ public:
         agg::trans_affine tr = grad.get_transform();
         tr.invert();
         tr.store_to(m);
+        std::cerr << "Matrix transform: " << m[0] << " " << m[1] << " " << m[2] << " " << m[3] << " " << m[4] << " " << m[5] << std::endl;
         pattern_->set_matrix(Cairo::Matrix(m[0],m[1],m[2],m[3],m[4],m[5]));
     }
 
@@ -170,8 +173,15 @@ public:
         return pattern_;
     }
 
+    gradient_unit_e units() const
+    {
+        return units_;
+    }
+
 private:
     Cairo::RefPtr<Cairo::Gradient> pattern_;
+    gradient_unit_e units_;
+
 };
 
 class cairo_face : private boost::noncopyable
@@ -452,9 +462,29 @@ public:
         context_->set_source(pattern.pattern());
     }
 
-    void set_gradient(cairo_gradient const& pattern)
+    void set_gradient(cairo_gradient const& pattern, const box2d<double> &bbox)
     {
-        context_->set_source(pattern.gradient());
+        Cairo::RefPtr<Cairo::Gradient> p = pattern.gradient();
+
+        double bx1=bbox.minx();
+        double by1=bbox.miny();
+        double bx2=bbox.maxx();
+        double by2=bbox.maxy();
+        if (pattern.units() != USER_SPACE_ON_USE)
+        {
+            if (pattern.units() == OBJECT_BOUNDING_BOX)
+            {
+                context_->get_path_extents (bx1, by1, bx2, by2);
+            }
+            std::cerr << "relative coords: " << bx1 << " " << by1 << " " <<  bx2 << " " << by2 << std::endl;
+            std::cerr << "relative coords: " << 1.0/(bx2-bx1) << " " << 1.0/(by2-by1) << std::endl;
+            Cairo::Matrix m = p->get_matrix();
+            m.scale(1.0/(bx2-bx1),1.0/(by2-by1));
+            m.translate(-bx1,-by1);
+            p->set_matrix(m);
+        }
+
+        context_->set_source(p);
     }
 
     void add_image(double x, double y, image_data_32 & data, double opacity = 1.0)
@@ -914,29 +944,28 @@ void cairo_renderer_base::render_marker(const int x, const int y, marker &marker
             vertex_stl_adapter<svg_path_storage> stl_storage(vmarker->source());
             svg_path_adapter svg_path(stl_storage);
 
+            context.add_agg_path(svg_path,attr.index);
             if(attr.fill_gradient.get_gradient_type() != NO_GRADIENT)
             {
                 cairo_gradient g(attr.fill_gradient,attr.opacity*opacity);
-                context.set_gradient(g);
-                context.add_agg_path(svg_path,attr.index);
+
+                context.set_gradient(g,bbox);
                 context.fill();
             }
             else if(attr.fill_flag)
             {
                 context.set_color(attr.fill_color.r,attr.fill_color.g,attr.fill_color.b,attr.opacity*opacity);
-                context.add_agg_path(svg_path,attr.index);
                 context.fill();
             }
 
             if(attr.stroke_gradient.get_gradient_type() != NO_GRADIENT)
             {
-                cairo_gradient g(attr.stroke_gradient,attr.opacity*opacity);
-                context.set_gradient(g);
                 context.set_line_width(attr.stroke_width);
                 context.set_line_cap(line_cap_enum(attr.line_cap));
                 context.set_line_join(line_join_enum(attr.line_join));
                 context.set_miter_limit(attr.miter_limit);
-                context.add_agg_path(svg_path,attr.index);
+                cairo_gradient g(attr.stroke_gradient,attr.opacity*opacity);
+                context.set_gradient(g,bbox);
                 context.stroke();
             }
             if(attr.stroke_flag)
@@ -946,7 +975,6 @@ void cairo_renderer_base::render_marker(const int x, const int y, marker &marker
                 context.set_line_cap(line_cap_enum(attr.line_cap));
                 context.set_line_join(line_join_enum(attr.line_join));
                 context.set_miter_limit(attr.miter_limit);
-                context.add_agg_path(svg_path,attr.index);
                 context.stroke();
             }
 

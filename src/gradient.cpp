@@ -53,7 +53,7 @@ gradient::gradient()
       x2_(0),
       y2_(0),
       r_(0),
-      units_(USER_SPACE_ON_USE)
+      units_(OBJECT_BOUNDING_BOX)
 {
 }
 

@@ -52,6 +52,7 @@ DEFINE_ENUM( gradient_e, gradient_enum );
 enum gradient_unit_enum
 {
     USER_SPACE_ON_USE,
+    USER_SPACE_ON_USE_BOUNDING_BOX, // used to indicate % age values were specified. This are % of the svg image extent.
     OBJECT_BOUNDING_BOX, //  (i.e., the abstract coordinate system where (0,0) is at the top/left of the object bounding box and (1,1) is at the bottom/right of the object bounding box)
     gradient_unit_enum_MAX
 };

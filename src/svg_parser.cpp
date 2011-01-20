@@ -30,6 +30,8 @@
 #include "agg_span_gradient.h"
 
 #include <boost/spirit/include/qi.hpp>
+#include <boost/spirit/include/phoenix_core.hpp>
+#include <boost/spirit/include/phoenix_operator.hpp>
 #include <boost/fusion/include/std_pair.hpp>
 #include <boost/foreach.hpp>
 #include <boost/algorithm/string/predicate.hpp>
@@ -87,6 +89,30 @@ double parse_double(const char* str)
     double val = 0.0;
     parse(str, str+ strlen(str),double_,val);
     return val;    
+}
+
+/*
+ * parse a double that might end with a %
+ * if it does then set the ref bool true and divide the result by 100
+ */
+double parse_double_optional_percent(const char* str, bool &percent)
+{
+    using namespace boost::spirit::qi;
+    using boost::phoenix::ref;
+
+    double val = 0.0;
+    char unit='\0';
+    parse(str, str+ strlen(str),double_[ref(val)=_1] >> *char_('%')[ref(unit)=_1]);
+    if (unit =='%')
+    {
+        percent = true;
+        val/=100.0;
+    }
+    else
+    {
+        percent = false;
+    }
+    return val;
 }
 
 bool parse_style (const char* str, pairs_type & v)
@@ -691,7 +717,7 @@ bool svg_parser::parse_common_gradient(xmlTextReaderPtr reader)
     }
     else
     {
-        std::cerr << "Unsupported gradient units specified" << std::endl;
+        temporary_gradient_.second.set_units(OBJECT_BOUNDING_BOX);
     }
 
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "gradientTransform");
@@ -723,43 +749,46 @@ void svg_parser::parse_radial_gradient(xmlTextReaderPtr reader)
         return;
 
     const xmlChar *value;
-    double cx = 0.0;
-    double cy = 0.0;
+    double cx = 0.5;
+    double cy = 0.5;
     double fx = 0.0;
     double fy = 0.0;
-    double r = 0.0;
-    double offset = 0.0;
-
+    double r = 0.5;
+    bool has_percent=true;
+    bool has_non_default=false;
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "cx");
-    if (value) cx = parse_double((const char*)value);
+    if (value) cx = parse_double_optional_percent((const char*)value, has_percent);
 
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "cy");
-    if (value) cy = parse_double((const char*)value);
+    if (value) cy = parse_double_optional_percent((const char*)value, has_percent);
 
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "fx");
     if (value)
-        fx = parse_double((const char*)value);
+        fx = parse_double_optional_percent((const char*)value, has_percent);
     else
         fx = cx;
 
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "fy");
     if (value)
-        fy = parse_double((const char*)value);
+        fy = parse_double_optional_percent((const char*)value, has_percent);
     else
         fy = cy;
 
-    value = xmlTextReaderGetAttribute(reader, BAD_CAST "offset");
-    if (value) offset = parse_double((const char*)value);
-
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "r");
-    if (value) r = parse_double((const char*)value);
+    if (value) r = parse_double_optional_percent((const char*)value, has_percent);
+
+    // this logic for detecting %'s will not support mixed coordinates.
+    if (has_percent && temporary_gradient_.second.get_units() == USER_SPACE_ON_USE)
+    {
+        temporary_gradient_.second.set_units(USER_SPACE_ON_USE_BOUNDING_BOX);
+    }
 
     temporary_gradient_.second.set_gradient_type(RADIAL);
     temporary_gradient_.second.set_control_points(fx,fy,cx,cy,r);
     // add this here in case we have no end tag, will be replaced if we do
     gradient_map_[temporary_gradient_.first] = temporary_gradient_.second;
 
-    std::cerr << "Found Radial Gradient: " << " " << cx << " " << cy << " " << fx << " " << fy << " " << r << " " << offset << std::endl;
+    std::cerr << "Found Radial Gradient: " << " " << cx << " " << cy << " " << fx << " " << fy << " " << r << std::endl;
 }
 
 void svg_parser::parse_linear_gradient(xmlTextReaderPtr reader)
@@ -769,21 +798,28 @@ void svg_parser::parse_linear_gradient(xmlTextReaderPtr reader)
 
     const xmlChar *value;
     double x1 = 0.0;
-    double x2 = 0.0;
+    double x2 = 1.0;
     double y1 = 0.0;
-    double y2 = 0.0;
+    double y2 = 1.0;
 
+    bool has_percent=true;
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "x1");
-    if (value) x1 = parse_double((const char*)value);
+    if (value) x1 = parse_double_optional_percent((const char*)value, has_percent);
 
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "x2");
-    if (value) x2 = parse_double((const char*)value);
+    if (value) x2 = parse_double_optional_percent((const char*)value, has_percent);
 
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "y1");
-    if (value) y1 = parse_double((const char*)value);
+    if (value) y1 = parse_double_optional_percent((const char*)value, has_percent);
 
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "y2");
-    if (value) y2 = parse_double((const char*)value);
+    if (value) y2 = parse_double_optional_percent((const char*)value, has_percent);
+
+    // this logic for detecting %'s will not support mixed coordinates.
+    if (has_percent && temporary_gradient_.second.get_units() == USER_SPACE_ON_USE)
+    {
+        temporary_gradient_.second.set_units(USER_SPACE_ON_USE_BOUNDING_BOX);
+    }
 
     temporary_gradient_.second.set_gradient_type(LINEAR);
     temporary_gradient_.second.set_control_points(x1,y1,x2,y2);
