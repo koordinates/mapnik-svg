@@ -74,7 +74,7 @@ void agg_renderer<T>::render_marker(const int x, const int y, marker &marker, co
         mtx *= agg::trans_affine_scaling(scale_factor_);
         mtx *= agg::trans_affine_translation(x, y);
 
-        svg_renderer.render(*ras_ptr, sl, renb, mtx, opacity);
+        svg_renderer.render(*ras_ptr, sl, renb, mtx, opacity, bbox);
 
 
     }

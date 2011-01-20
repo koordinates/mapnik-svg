@@ -111,7 +111,7 @@ void agg_renderer<T>::process(markers_symbolizer const& sym,
                 while (placement.get_point(&x, &y, &angle))
                 {
                     agg::trans_affine matrix = recenter * tr *agg::trans_affine_rotation(angle) * agg::trans_affine_translation(x, y);
-                    svg_renderer.render(*ras_ptr, sl, renb, matrix, sym.get_opacity());
+                    svg_renderer.render(*ras_ptr, sl, renb, matrix, sym.get_opacity(),bbox);
                     if (writer.first)
                         //writer.first->add_box(label_ext, feature, t_, writer.second);
                         std::clog << "### Warning metawriter not yet supported for LINE placement\n";

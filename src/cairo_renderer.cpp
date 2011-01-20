@@ -33,7 +33,6 @@
 #include <mapnik/config_error.hpp>
 #include <mapnik/parse_path.hpp>
 #include <mapnik/marker_cache.hpp>
-#include <mapnik/svg/svg_converter.hpp>
 #include <mapnik/svg/svg_path_adapter.hpp>
 #include <mapnik/svg/svg_path_attributes.hpp>
 
@@ -159,7 +158,6 @@ public:
         agg::trans_affine tr = grad.get_transform();
         tr.invert();
         tr.store_to(m);
-        std::cerr << "Matrix transform: " << m[0] << " " << m[1] << " " << m[2] << " " << m[3] << " " << m[4] << " " << m[5] << std::endl;
         pattern_->set_matrix(Cairo::Matrix(m[0],m[1],m[2],m[3],m[4],m[5]));
     }
 
@@ -476,8 +474,6 @@ public:
             {
                 context_->get_path_extents (bx1, by1, bx2, by2);
             }
-            std::cerr << "relative coords: " << bx1 << " " << by1 << " " <<  bx2 << " " << by2 << std::endl;
-            std::cerr << "relative coords: " << 1.0/(bx2-bx1) << " " << 1.0/(by2-by1) << std::endl;
             Cairo::Matrix m = p->get_matrix();
             m.scale(1.0/(bx2-bx1),1.0/(by2-by1));
             m.translate(-bx1,-by1);

@@ -30,15 +30,6 @@ static const char * gradient_strings[] = {
     "no-gradient",
     "linear",
     "radial",
-    /*
-    "radial_focus",
-    "x",
-    "y",
-    "xy",
-    "sqrt_xy",
-    "diamond",
-    "conic",
-    */
     ""
 };
 
@@ -136,12 +127,12 @@ void gradient::set_control_points(double x1, double y1, double x2, double y2, do
     y2_ = y2;
     r_ = r;
 }
-inline void gradient::get_control_points(double &x1, double &y1, double &x2, double &y2, double &r) const
+void gradient::get_control_points(double &x1, double &y1, double &x2, double &y2, double &r) const
 {
     get_control_points(x1,y1,x2,y2);
     r=r_;
 }
-inline void gradient::get_control_points(double &x1, double &y1, double &x2, double &y2) const
+void gradient::get_control_points(double &x1, double &y1, double &x2, double &y2) const
 {
     x1 = x1_;
     y1 = y1_;
