@@ -210,6 +210,9 @@ if env['HAS_CAIRO'] or env['HAS_PYCAIRO']:
     for cpp in fixup:
         sources.insert(0,env2.SharedObject(cpp))
 
+if env['SVG_RENDERER']:
+        env2.Append(CXXFLAGS = '-DSVG_RENDERER')
+
 
 _mapnik = py_env.LoadableModule('mapnik/_mapnik2', sources, LIBS=libraries, LDMODULEPREFIX='', LDMODULESUFFIX='.so',LINKFLAGS=linkflags)
 

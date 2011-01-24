@@ -81,6 +81,11 @@ void export_glyph_symbolizer();
 static Pycairo_CAPI_t *Pycairo_CAPI;
 #endif
 
+#if defined(SVG_RENDERER)
+#include <mapnik/svg_renderer.hpp>
+#include <fstream>
+#endif
+
 void render(const mapnik::Map& map,mapnik::image_32& image, double scale_factor = 1.0 , unsigned offset_x = 0u , unsigned offset_y = 0u)
 {
     Py_BEGIN_ALLOW_THREADS
@@ -192,6 +197,24 @@ void render_to_file1(const mapnik::Map& map,
         throw mapnik::ImageWriterException("Cairo backend not available, cannot write to format: " + format);
 #endif
     }
+#if defined(SVG_RENDERER)
+    else if (format == "internal-svg")
+    {
+        typedef mapnik::svg_renderer<std::ostream_iterator<char> > svg_ren;
+
+        std::ofstream output_stream(filename.c_str());
+
+        if(output_stream)
+        {
+            std::ostream_iterator<char> output_stream_iterator(output_stream);
+
+            svg_ren renderer(map, output_stream_iterator);
+            renderer.apply();
+
+            output_stream.close();
+        }
+    }
+#endif
     else 
     {
         mapnik::image_32 image(map.width(),map.height());
