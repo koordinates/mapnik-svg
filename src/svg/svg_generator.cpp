@@ -69,7 +69,7 @@ namespace mapnik { namespace svg {
     template <typename OutputIterator>
     void svg_generator<OutputIterator>::generate_path(path_type const& path, path_output_attributes const& path_attributes) 
     {	
-	path_data_grammar data_grammar(path);
+        path_data_grammar data_grammar(path);
 	path_attributes_grammar attributes_grammar;
 	path_dash_array_grammar dash_array_grammar;
 

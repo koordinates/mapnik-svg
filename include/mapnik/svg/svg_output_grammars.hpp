@@ -26,6 +26,7 @@
 // mapnik
 #include <mapnik/vertex.hpp>
 #include <mapnik/geometry.hpp>
+#include <mapnik/geometry_iterator.hpp>
 #include <mapnik/ctrans.hpp>
 #include <mapnik/svg/svg_output_attributes.hpp>
 
@@ -34,8 +35,9 @@
 #include <boost/spirit/include/phoenix_operator.hpp>
 #include <boost/spirit/repository/include/karma_confix.hpp>
 #include <boost/spirit/home/phoenix/bind/bind_member_function.hpp>
-#include <boost/fusion/include/adapt_class.hpp>
 #include <boost/fusion/include/std_pair.hpp>
+#include <boost/fusion/include/struct.hpp>
+#include <boost/fusion/include/boost_tuple.hpp>
 
 // std
 #include <iostream>
@@ -50,14 +52,23 @@
  * original value (in map coordinates) and once to generate them
  * with their value in user coordinates (after conversion).
  */
-BOOST_FUSION_ADAPT_CLASS(
-    mapnik::vertex_vector2<mapnik::vertex2d>::vertex_type,
-    (unsigned, unsigned, obj.get<2>(), /**/)
-    (double, double, obj.get<0>(), /**/)
-    (double, double, obj.get<1>(), /**/)
-    (double, double, obj.get<0>(), /**/)
-    (double, double, obj.get<1>(), /**/)
+/*BOOST_FUSION_ADAPT_STRUCT(
+    mapnik::vertex2d,
+    (unsigned, cmd)
+    (double, x)
+    (double, y)
+    (double, x)
+    (double, y)
+    )*/
+/*BOOST_FUSION_ADAPT_STRUCT(
+    mapnik::geometry_iterator::value_type,
+    (unsigned, get<2>())
+    (mapnik::geometry_iterator::container_type::value_type, get<0>())
+    (mapnik::geometry_iterator::container_type::value_type, get<1>())
+    (mapnik::geometry_iterator::container_type::value_type, get<0>())
+    (mapnik::geometry_iterator::container_type::value_type, get<1>())
 )
+*/
 
 /*!
  * mapnik::svg::path_output_attributes is adapted as a fusion sequence
@@ -66,41 +77,41 @@ BOOST_FUSION_ADAPT_CLASS(
  * This adaptation is the primary reason why the attributes are stored in
  * this structure before being passed to the generate_path method.
  */
-BOOST_FUSION_ADAPT_CLASS(
+BOOST_FUSION_ADAPT_STRUCT(
     mapnik::svg::path_output_attributes,
-    (std::string, std::string, obj.fill_color(), /**/)
-    (double, double, obj.fill_opacity(), /**/)
-    (std::string, std::string, obj.stroke_color(), /**/)
-    (double, double, obj.stroke_opacity(), /**/)
-    (double, double, obj.stroke_width(), /**/)
-    (std::string, std::string, obj.stroke_linecap(), /**/)
-    (std::string, std::string, obj.stroke_linejoin(), /**/)
-    (double, double, obj.stroke_dashoffset(), /**/)
+    (std::string, fill_color_)
+    (double, fill_opacity_)
+    (std::string, stroke_color_)
+    (double, stroke_opacity_)
+    (double, stroke_width_)
+    (std::string, stroke_linecap_)
+    (std::string, stroke_linejoin_)
+    (double, stroke_dashoffset_)
 )
 
 /*!
  * mapnik::svg::rect_output_attributes is adapted as a fusion sequence
  * in order to be used directly by the svg_rect_attributes_grammar (below).
  */
-BOOST_FUSION_ADAPT_CLASS(
+BOOST_FUSION_ADAPT_STRUCT(
     mapnik::svg::rect_output_attributes,
-    (int, int, obj.x(), /**/)
-    (int, int, obj.y(), /**/)
-    (unsigned, unsigned, obj.width(), /**/)
-    (unsigned, unsigned, obj.height(), /**/)
-    (std::string, std::string, obj.fill_color(), /**/)
+    (int, x_)
+    (int, y_)
+    (unsigned, width_)
+    (unsigned, height_)
+    (std::string, fill_color_)
 )
 
 /*!
  * mapnik::svg::root_output_attributes is adapted as a fusion sequence
  * in order to be used directly by the svg_root_attributes_grammar (below).
  */
-BOOST_FUSION_ADAPT_CLASS(
+BOOST_FUSION_ADAPT_STRUCT(
     mapnik::svg::root_output_attributes,
-    (unsigned, unsigned, obj.width(), /**/)
-    (unsigned, unsigned, obj.height(), /**/)
-    (double, double, obj.svg_version(), /**/)
-    (std::string, std::string, obj.svg_namespace_url(), /**/)
+    (unsigned, width_)
+    (unsigned, height_)
+    (double, svg_version_)
+    (std::string, svg_namespace_url_)
 )
 
 /*!
@@ -117,30 +128,35 @@ namespace boost { namespace spirit { namespace traits {
 
     template <>
     struct container_iterator<mapnik::geometry_type const>
-    {
-	typedef mapnik::geometry_type::iterator type;
+    {       
+      //typedef mapnik::geometry_type::iterator type; 
+        typedef mapnik::geometry_iterator_type type; 
     };
 
     template <>
     struct begin_container<mapnik::geometry_type const>
     {
-	static mapnik::geometry_type::iterator 
+      //static mapnik::geometry_type::iterator  	
+        static mapnik::geometry_iterator_type	
 	call(mapnik::geometry_type const& g)
 	{
-	    return g.begin();
+	  //return g.begin();
+  	    return mapnik::geometry_iterator_type(0, g);
 	}
     };
 
     template <>
     struct end_container<mapnik::geometry_type const>
     {
-	static mapnik::geometry_type::iterator 
+      //static mapnik::geometry_type::iterator  	
+        static mapnik::geometry_iterator_type  	
 	call(mapnik::geometry_type const& g)
 	{
-	    return g.end();
+	  //return g.end(); 
+            return mapnik::geometry_iterator_type(g);
 	}
     };
-}}}
+ }}}
 
 namespace mapnik { namespace svg {
 
@@ -194,8 +210,10 @@ namespace mapnik { namespace svg {
     struct svg_path_data_grammar : karma::grammar<OutputIterator, mapnik::geometry_type()>
     {
 	typedef path_coordinate_transformer<PathType> coordinate_transformer;
-	typedef mapnik::vertex_vector2<mapnik::vertex2d>::vertex_type vertex_type;
-	typedef mapnik::vertex_vector2<mapnik::vertex2d>::value_type vertex_component_type;
+      //typedef mapnik::vertex_vector2<mapnik::vertex2d>::vertex_type vertex_type;
+        typedef mapnik::geometry_iterator_type::value_type vertex_type;
+      //typedef mapnik::vertex_vector2<mapnik::vertex2d>::value_type vertex_component_type;
+        typedef mapnik::geometry_type::value_type vertex_component_type;
 
 	explicit svg_path_data_grammar(PathType const& path_type)
 	    : svg_path_data_grammar::base_type(svg_path),
