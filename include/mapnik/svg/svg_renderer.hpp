@@ -219,13 +219,22 @@ public:
                                        gradient_adaptor_type,
                                        color_func_type> span_gradient_type;
 
+            // scale everything up since agg turns things into integers a bit too soon
+            int scaleup=255;
+            x1*=scaleup;
+            y1*=scaleup;
+            x2*=scaleup;
+            y2*=scaleup;
+
+            transform.scale(scaleup,scaleup);
+
             interpolator_type     span_interpolator(transform);
             gradient_adaptor_type gradient_adaptor(x1,y1,x2,y2);
 
             span_gradient_type    span_gradient(span_interpolator,
                                               gradient_adaptor,
                                               m_gradient_lut,
-                                              0, 255);
+                                              0, scaleup);
 
             render_scanlines_aa(ras, sl, ren, m_alloc, span_gradient);
         }
