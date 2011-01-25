@@ -924,9 +924,12 @@ void cairo_renderer_base::render_marker(const int x, const int y, marker &marker
         agg::pod_bvector<path_attributes> const & attributes_ = vmarker->attributes();
         for(unsigned i = 0; i < attributes_.size(); ++i)
         {
+            mapnik::svg::path_attributes const& attr = attributes_[i];
+            if (!attr.visibility_flag)
+                continue;
+
             context.save();
 
-            mapnik::svg::path_attributes const& attr = attributes_[i];
             agg::trans_affine transform = attr.transform;
             transform *= mtx;
 
@@ -964,7 +967,7 @@ void cairo_renderer_base::render_marker(const int x, const int y, marker &marker
                 context.set_gradient(g,bbox);
                 context.stroke();
             }
-            if(attr.stroke_flag)
+            else if(attr.stroke_flag)
             {
                 context.set_color(attr.stroke_color.r,attr.stroke_color.g,attr.stroke_color.b,attr.opacity*opacity);
                 context.set_line_width(attr.stroke_width);

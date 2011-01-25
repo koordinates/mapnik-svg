@@ -359,6 +359,10 @@ void svg_parser::parse_attr(const xmlChar * name, const xmlChar * value )
         double opacity = parse_double((const char*)value);
         path_.opacity(opacity);
     }
+    else if (xmlStrEqual(name, BAD_CAST "visibility"))
+    {
+        path_.visibility(!xmlStrEqual(value, BAD_CAST "hidden"));
+    }
 }
 
 
@@ -755,7 +759,7 @@ void svg_parser::parse_radial_gradient(xmlTextReaderPtr reader)
     double fy = 0.0;
     double r = 0.5;
     bool has_percent=true;
-    bool has_non_default=false;
+
     value = xmlTextReaderGetAttribute(reader, BAD_CAST "cx");
     if (value) cx = parse_double_optional_percent((const char*)value, has_percent);
 

@@ -261,6 +261,9 @@ public:
         for(unsigned i = 0; i < attributes_.size(); ++i)
         {
             mapnik::svg::path_attributes const& attr = attributes_[i];
+            if (!attr.visibility_flag)
+                continue;
+
             transform = attr.transform;
 
             double bx1,by1,bx2,by2;
