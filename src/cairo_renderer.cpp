@@ -324,6 +324,11 @@ public:
         context_->set_dash(d, 0.0);
     }
 
+    void set_fill_rule(Cairo::FillRule fill_rule)
+    {
+        context_->set_fill_rule(fill_rule);
+    }
+
     void move_to(double x, double y)
     {
 #if CAIRO_VERSION < CAIRO_VERSION_ENCODE(1, 6, 0)
@@ -943,38 +948,54 @@ void cairo_renderer_base::render_marker(const int x, const int y, marker &marker
             vertex_stl_adapter<svg_path_storage> stl_storage(vmarker->source());
             svg_path_adapter svg_path(stl_storage);
 
-            context.add_agg_path(svg_path,attr.index);
-            if(attr.fill_gradient.get_gradient_type() != NO_GRADIENT)
+            if (attr.fill_flag || attr.fill_gradient.get_gradient_type() != NO_GRADIENT)
             {
-                cairo_gradient g(attr.fill_gradient,attr.opacity*opacity);
+                context.add_agg_path(svg_path,attr.index);
+                if (attr.even_odd_flag)
+                {
+                    context.set_fill_rule(Cairo::FILL_RULE_EVEN_ODD);
+                }
+                else
+                {
+                    context.set_fill_rule(Cairo::FILL_RULE_WINDING);
+                }
+                if(attr.fill_gradient.get_gradient_type() != NO_GRADIENT)
+                {
+                    cairo_gradient g(attr.fill_gradient,attr.opacity*opacity);
 
-                context.set_gradient(g,bbox);
-                context.fill();
-            }
-            else if(attr.fill_flag)
-            {
-                context.set_color(attr.fill_color.r,attr.fill_color.g,attr.fill_color.b,attr.opacity*opacity);
-                context.fill();
+                    context.set_gradient(g,bbox);
+                    context.fill();
+                }
+                else if(attr.fill_flag)
+                {
+                    context.set_color(attr.fill_color.r,attr.fill_color.g,attr.fill_color.b,attr.opacity*opacity);
+                    context.fill();
+                }
             }
 
-            if(attr.stroke_gradient.get_gradient_type() != NO_GRADIENT)
+
+            if(attr.stroke_gradient.get_gradient_type() != NO_GRADIENT || attr.stroke_flag)
             {
-                context.set_line_width(attr.stroke_width);
-                context.set_line_cap(line_cap_enum(attr.line_cap));
-                context.set_line_join(line_join_enum(attr.line_join));
-                context.set_miter_limit(attr.miter_limit);
-                cairo_gradient g(attr.stroke_gradient,attr.opacity*opacity);
-                context.set_gradient(g,bbox);
-                context.stroke();
-            }
-            else if(attr.stroke_flag)
-            {
-                context.set_color(attr.stroke_color.r,attr.stroke_color.g,attr.stroke_color.b,attr.opacity*opacity);
-                context.set_line_width(attr.stroke_width);
-                context.set_line_cap(line_cap_enum(attr.line_cap));
-                context.set_line_join(line_join_enum(attr.line_join));
-                context.set_miter_limit(attr.miter_limit);
-                context.stroke();
+                context.add_agg_path(svg_path,attr.index);
+                if(attr.stroke_gradient.get_gradient_type() != NO_GRADIENT)
+                {
+                    context.set_line_width(attr.stroke_width);
+                    context.set_line_cap(line_cap_enum(attr.line_cap));
+                    context.set_line_join(line_join_enum(attr.line_join));
+                    context.set_miter_limit(attr.miter_limit);
+                    cairo_gradient g(attr.stroke_gradient,attr.opacity*opacity);
+                    context.set_gradient(g,bbox);
+                    context.stroke();
+                }
+                else if(attr.stroke_flag)
+                {
+                    context.set_color(attr.stroke_color.r,attr.stroke_color.g,attr.stroke_color.b,attr.opacity*opacity);
+                    context.set_line_width(attr.stroke_width);
+                    context.set_line_cap(line_cap_enum(attr.line_cap));
+                    context.set_line_join(line_join_enum(attr.line_join));
+                    context.set_miter_limit(attr.miter_limit);
+                    context.stroke();
+                }
             }
 
             context.restore();
