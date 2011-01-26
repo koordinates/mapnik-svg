@@ -40,7 +40,9 @@
 namespace mapnik {
 
 template <typename T>
-void agg_renderer<T>::render_marker(const int x, const int y, marker &marker, const agg::trans_affine & tr, double opacity)
+void agg_renderer<T>::process(point_symbolizer const& sym,
+                              Feature const& feature,
+                              proj_transform const& prj_trans)
 {
     std::string filename = path_processor_type::evaluate(*sym.get_filename(), feature);
     

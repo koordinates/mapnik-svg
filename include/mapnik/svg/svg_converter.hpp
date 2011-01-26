@@ -252,7 +252,6 @@ public:
     {
         cur_attr().fill_color.opacity(op);
     }
-    
     void stroke_opacity(double op)
     {
         cur_attr().stroke_color.opacity(op);

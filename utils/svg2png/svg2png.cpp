@@ -165,6 +165,7 @@ int main (int argc,char** argv)
         std::clog << "Exception of unknown type!" << std::endl;
         return -1;
     }
+
     return 0;
 }
 
