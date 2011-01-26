@@ -281,7 +281,7 @@ public:
             if (attr.fill_flag || attr.fill_gradient.get_gradient_type() != NO_GRADIENT)
             {
                 ras.reset();
-                
+
                 if(fabs(curved_trans_contour.width()) < 0.0001)
                 {
                     ras.add_path(curved_trans, attr.index);

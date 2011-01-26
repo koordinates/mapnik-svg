@@ -33,7 +33,7 @@
         <Rule>
             <ShieldSymbolizer
              name="[label]"
-             file="../svg/ellipses.svg" 
+             file="../svg/ellipses.svg"
              allow_overlap="true"
              face_name="DejaVu Sans Book"
              size="10"
