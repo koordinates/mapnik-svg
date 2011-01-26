@@ -182,6 +182,62 @@ private:
 
 };
 
+class cairo_gradient : private boost::noncopyable
+{
+public:
+    cairo_gradient(const mapnik::gradient &grad, double opacity=1.0)
+    {
+        double x1,x2,y1,y2,r;
+        grad.get_control_points(x1,y1,x2,y2,r);
+        if (grad.get_gradient_type() == LINEAR)
+        {
+            pattern_ = Cairo::LinearGradient::create(x1, y1, x2, y2);
+        }
+        else if (grad.get_gradient_type() == RADIAL)
+        {
+            pattern_ = Cairo::RadialGradient::create(x1, y1, 0, x2, y2, r);
+        }
+
+        units_ = grad.get_units();
+
+        BOOST_FOREACH ( mapnik::stop_pair const& st, grad.get_stop_array() )
+        {
+            mapnik::color const& stop_color = st.second;
+            double r= static_cast<double> (stop_color.red())/255.0;
+            double g= static_cast<double> (stop_color.green())/255.0;
+            double b= static_cast<double> (stop_color.blue())/255.0;
+            double a= static_cast<double> (stop_color.alpha())/255.0;
+            pattern_->add_color_stop_rgba(st.first, r, g, b, a*opacity);
+        }
+
+        double m[6];
+        agg::trans_affine tr = grad.get_transform();
+        tr.invert();
+        tr.store_to(m);
+        pattern_->set_matrix(Cairo::Matrix(m[0],m[1],m[2],m[3],m[4],m[5]));
+    }
+
+    ~cairo_gradient(void)
+    {
+    }
+
+
+    Cairo::RefPtr<Cairo::Gradient> const& gradient(void) const
+    {
+        return pattern_;
+    }
+
+    gradient_unit_e units() const
+    {
+        return units_;
+    }
+
+private:
+    Cairo::RefPtr<Cairo::Gradient> pattern_;
+    gradient_unit_e units_;
+
+};
+
 class cairo_face : private boost::noncopyable
 {
 public:
@@ -324,6 +380,11 @@ public:
         context_->set_dash(d, 0.0);
     }
 
+    void set_fill_rule(Cairo::FillRule fill_rule)
+    {
+        context_->set_fill_rule(fill_rule);
+    }
+
     void move_to(double x, double y)
     {
 #if CAIRO_VERSION < CAIRO_VERSION_ENCODE(1, 6, 0)
@@ -341,6 +402,15 @@ public:
         context_->curve_to(ct1_x,ct1_y,ct2_x,ct2_y,end_x,end_y);
     }
 
+    void curve_to(double ct1_x, double ct1_y, double ct2_x, double ct2_y, double end_x, double end_y)
+    {
+        context_->curve_to(ct1_x,ct1_y,ct2_x,ct2_y,end_x,end_y);
+    }
+
+    void close_path()
+    {
+        context_->close_path();
+    }
     void close_path()
     {
         context_->close_path();
@@ -374,6 +444,63 @@ public:
             else if (cm == SEG_LINETO)
             {
                 line_to(x, y);
+            }
+        }
+    }
+
+    template <typename T>
+    void add_agg_path(T& path, unsigned start_index = 0)
+    {
+        double x, y;
+
+        path.rewind(start_index);
+
+        for (unsigned cm = path.vertex(&x, &y); !agg::is_stop(cm); cm = path.vertex(&x, &y))
+        {
+            if (agg::is_move_to(cm))
+            {
+                move_to(x, y);
+            }
+            else if (agg::is_drawing(cm))
+            {
+                if (agg::is_curve3(cm))
+                {
+                    double end_x;
+                    double end_y;
+                    std::cerr << "Curve 3 not implemented" << std::endl;
+                    path.vertex(&end_x, &end_y);
+
+                    curve_to(x,y,x,y,end_x,end_y);
+                }
+                else if (agg::is_curve4(cm))
+                {
+                    double ct2_x;
+                    double ct2_y;
+                    double end_x;
+                    double end_y;
+
+                    path.vertex(&ct2_x, &ct2_y);
+                    path.vertex(&end_x, &end_y);
+
+                    curve_to(x,y,ct2_x,ct2_y,end_x,end_y);
+                }
+                else if (agg::is_line_to(cm))
+                {
+                    line_to(x, y);
+                }
+                else
+                {
+                    std::cerr << "Unimplemented drawing command: " << cm << std::endl;
+                    move_to(x, y);
+                }
+            }
+            else if (agg::is_close(cm))
+            {
+                close_path();
+            }
+            else
+            {
+                std::cerr << "Unimplemented path command: " << cm << std::endl;
             }
         }
     }
@@ -483,6 +610,29 @@ public:
         context_->set_source(p);
     }
 
+    void set_gradient(cairo_gradient const& pattern, const box2d<double> &bbox)
+    {
+        Cairo::RefPtr<Cairo::Gradient> p = pattern.gradient();
+
+        double bx1=bbox.minx();
+        double by1=bbox.miny();
+        double bx2=bbox.maxx();
+        double by2=bbox.maxy();
+        if (pattern.units() != USER_SPACE_ON_USE)
+        {
+            if (pattern.units() == OBJECT_BOUNDING_BOX)
+            {
+                context_->get_path_extents (bx1, by1, bx2, by2);
+            }
+            Cairo::Matrix m = p->get_matrix();
+            m.scale(1.0/(bx2-bx1),1.0/(by2-by1));
+            m.translate(-bx1,-by1);
+            p->set_matrix(m);
+        }
+
+        context_->set_source(p);
+    }
+
     void add_image(double x, double y, image_data_32 & data, double opacity = 1.0)
     {
         cairo_pattern pattern(data);
@@ -508,6 +658,26 @@ public:
     void set_matrix(Cairo::Matrix const& matrix)
     {
         context_->set_matrix(matrix);
+    }
+
+    void transform(Cairo::Matrix const& matrix)
+    {
+        context_->transform(matrix);
+    }
+
+    void translate(double x, double y)
+    {
+        context_->translate(x,y);
+    }
+
+    void save()
+    {
+        context_->save();
+    }
+
+    void restore()
+    {
+        context_->restore();
     }
 
     void transform(Cairo::Matrix const& matrix)
@@ -977,6 +1147,106 @@ void cairo_renderer_base::render_marker(const int x, const int y, marker &marker
             context.restore();
         }
     }
+}
+
+void cairo_renderer_base::render_marker(const int x, const int y, marker &marker, const agg::trans_affine & tr, double opacity)
+
+{
+    cairo_context context(context_);
+    if (marker.is_vector())
+    {
+        box2d<double> bbox;
+        bbox = (*marker.get_vector_data())->bounding_box();
+
+        coord<double,2> c = bbox.center();
+        agg::trans_affine recenter = agg::trans_affine_translation(0.5 * marker.width()-c.x,0.5 * marker.height()-c.y);
+
+        agg::trans_affine mtx = tr;
+        mtx = recenter * mtx;
+        mtx *= agg::trans_affine_translation(x, y);
+
+        typedef coord_transform2<CoordTransform,geometry_type> path_type;
+        mapnik::path_ptr vmarker = *marker.get_vector_data();
+
+        agg::pod_bvector<path_attributes> const & attributes_ = vmarker->attributes();
+        for(unsigned i = 0; i < attributes_.size(); ++i)
+        {
+            mapnik::svg::path_attributes const& attr = attributes_[i];
+            if (!attr.visibility_flag)
+                continue;
+
+            context.save();
+
+            agg::trans_affine transform = attr.transform;
+            transform *= mtx;
+
+            if (transform.is_valid() && !transform.is_identity())
+            {
+                double m[6];
+                transform.store_to(m);
+                context.transform(Cairo::Matrix(m[0],m[1],m[2],m[3],m[4],m[5]));
+            }
+
+            vertex_stl_adapter<svg_path_storage> stl_storage(vmarker->source());
+            svg_path_adapter svg_path(stl_storage);
+
+            if (attr.fill_flag || attr.fill_gradient.get_gradient_type() != NO_GRADIENT)
+            {
+                context.add_agg_path(svg_path,attr.index);
+                if (attr.even_odd_flag)
+                {
+                    context.set_fill_rule(Cairo::FILL_RULE_EVEN_ODD);
+                }
+                else
+                {
+                    context.set_fill_rule(Cairo::FILL_RULE_WINDING);
+                }
+                if(attr.fill_gradient.get_gradient_type() != NO_GRADIENT)
+                {
+                    cairo_gradient g(attr.fill_gradient,attr.opacity*opacity);
+
+                    context.set_gradient(g,bbox);
+                    context.fill();
+                }
+                else if(attr.fill_flag)
+                {
+                    context.set_color(attr.fill_color.r,attr.fill_color.g,attr.fill_color.b,attr.opacity*opacity);
+                    context.fill();
+                }
+            }
+
+
+            if(attr.stroke_gradient.get_gradient_type() != NO_GRADIENT || attr.stroke_flag)
+            {
+                context.add_agg_path(svg_path,attr.index);
+                if(attr.stroke_gradient.get_gradient_type() != NO_GRADIENT)
+                {
+                    context.set_line_width(attr.stroke_width);
+                    context.set_line_cap(line_cap_enum(attr.line_cap));
+                    context.set_line_join(line_join_enum(attr.line_join));
+                    context.set_miter_limit(attr.miter_limit);
+                    cairo_gradient g(attr.stroke_gradient,attr.opacity*opacity);
+                    context.set_gradient(g,bbox);
+                    context.stroke();
+                }
+                else if(attr.stroke_flag)
+                {
+                    context.set_color(attr.stroke_color.r,attr.stroke_color.g,attr.stroke_color.b,attr.opacity*opacity);
+                    context.set_line_width(attr.stroke_width);
+                    context.set_line_cap(line_cap_enum(attr.line_cap));
+                    context.set_line_join(line_join_enum(attr.line_join));
+                    context.set_miter_limit(attr.miter_limit);
+                    context.stroke();
+                }
+            }
+
+            context.restore();
+        }
+    }
+    else if (marker.is_bitmap())
+    {
+        context.add_image(x, y, **marker.get_bitmap_data(), opacity);
+    }
     else if (marker.is_bitmap())
     {
         context.add_image(x, y, **marker.get_bitmap_data(), opacity);
@@ -1069,6 +1339,10 @@ void cairo_renderer_base::process(shield_symbolizer const& sym,
     boost::array<double,6> const& m = sym.get_transform();
     tr.load_from(&m[0]);
 
+    agg::trans_affine tr;
+    boost::array<double,6> const& m = sym.get_transform();
+    tr.load_from(&m[0]);
+
     std::string filename = path_processor_type::evaluate( *sym.get_filename(), feature);
     boost::optional<marker_ptr> marker;
     if ( !filename.empty() )
@@ -1097,6 +1371,8 @@ void cairo_renderer_base::process(shield_symbolizer const& sym,
         {
             cairo_context context(context_);
             string_info info(text);
+
+            placement_finder<label_collision_detector4> finder(detector_);
 
             placement_finder<label_collision_detector4> finder(detector_);
 
@@ -1135,6 +1411,41 @@ void cairo_renderer_base::process(shield_symbolizer const& sym,
                                 geom.vertex(&label_x,&label_y);  // by vertex
                             else if( how_placed == INTERIOR_POINT_PLACEMENT )
                                 geom.label_interior_position(&label_x,&label_y);
+                            else
+                                geom.label_position(&label_x, &label_y);  // by middle of line or by point
+                            prj_trans.backward(label_x,label_y, z);
+                            t_.forward(&label_x,&label_y);
+
+                            label_x += boost::get<0>(shield_pos);
+                            label_y += boost::get<1>(shield_pos);
+
+                            finder.find_point_placement( text_placement,label_x,label_y,0.0,
+                                                         sym.get_vertical_alignment(),
+                                                         sym.get_line_spacing(),
+                                                         sym.get_character_spacing(),
+                                                         sym.get_horizontal_alignment(),
+                                                         sym.get_justify_alignment() );
+
+                            for (unsigned int ii = 0; ii < text_placement.placements.size(); ++ ii)
+                            {
+                                double x = text_placement.placements[ii].starting_x;
+                                double y = text_placement.placements[ii].starting_y;
+
+                                int px;
+                                int py;
+                                box2d<double> label_ext;
+                        text_placement.avoid_edges = sym.get_avoid_edges();
+                        text_placement.allow_overlap = sym.get_allow_overlap();
+                        position const& pos = sym.get_displacement();
+                        position const& shield_pos = sym.get_shield_displacement();
+                        for( unsigned jj = 0; jj < geom.num_points(); jj++ )
+                        {
+                            double label_x;
+                            double label_y;
+                            double z=0.0;
+
+                            if( how_placed == VERTEX_PLACEMENT )
+                                geom.vertex(&label_x,&label_y);  // by vertex
                             else
                                 geom.label_position(&label_x, &label_y);  // by middle of line or by point
                             prj_trans.backward(label_x,label_y, z);
@@ -1197,6 +1508,8 @@ void cairo_renderer_base::process(shield_symbolizer const& sym,
                             }
 
                             finder.update_detector(text_placement);
+
+                            finder.update_detector(text_placement);
                         }
                     }
                     else if (geom.num_points() > 1 && how_placed == LINE_PLACEMENT)
@@ -1206,6 +1519,7 @@ void cairo_renderer_base::process(shield_symbolizer const& sym,
                         text_placement.avoid_edges = sym.get_avoid_edges();
                         finder.find_point_placements<path_type>(text_placement, path);
 
+                        position const&  pos = sym.get_displacement();
                         position const&  pos = sym.get_displacement();
                         for (unsigned int ii = 0; ii < text_placement.placements.size(); ++ ii)
                         {

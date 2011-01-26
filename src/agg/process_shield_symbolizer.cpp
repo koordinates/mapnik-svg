@@ -110,6 +110,8 @@ void  agg_renderer<T>::process(shield_symbolizer const& sym,
 
             int w = (*marker)->width();
             int h = (*marker)->height();
+            int w = (*marker)->width();
+            int h = (*marker)->height();
 
             metawriter_with_properties writer = sym.get_metawriter();
 
@@ -138,8 +140,6 @@ void  agg_renderer<T>::process(shield_symbolizer const& sym,
 
                             if( how_placed == VERTEX_PLACEMENT )
                                 geom.vertex(&label_x,&label_y);  // by vertex
-                            else if( how_placed == INTERIOR_POINT_PLACEMENT )
-                                geom.label_interior_position(&label_x,&label_y);
                             else
                                 geom.label_position(&label_x, &label_y);  // by middle of line or by point
                             prj_trans.backward(label_x,label_y, z);
@@ -204,6 +204,14 @@ void  agg_renderer<T>::process(shield_symbolizer const& sym,
 
                         text_placement.avoid_edges = sym.get_avoid_edges();
                         finder.find_point_placements<path_type>(text_placement,path);
+                    }
+
+                    else if (geom.num_points() > 1 && how_placed == LINE_PLACEMENT)
+                    {
+                        placement text_placement(info, sym, scale_factor_, w, h, true);
+
+                        text_placement.avoid_edges = sym.get_avoid_edges();
+                        finder.find_point_placements<path_type>(text_placement,path);
 
                         position const&  pos = sym.get_displacement();
                         for (unsigned int ii = 0; ii < text_placement.placements.size(); ++ ii)
@@ -223,6 +231,8 @@ void  agg_renderer<T>::process(shield_symbolizer const& sym,
                             box2d<double> dim = ren.prepare_glyphs(&text_placement.placements[ii]);
                             ren.render(x,y);
                         }
+                        finder.update_detector(text_placement);
+                        if (writer.first) writer.first->add_text(text_placement, faces, feature, t_, writer.second);
                         finder.update_detector(text_placement);
                         if (writer.first) writer.first->add_text(text_placement, faces, feature, t_, writer.second);
                     }

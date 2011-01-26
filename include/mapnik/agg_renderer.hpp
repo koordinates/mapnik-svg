@@ -36,12 +36,26 @@
 
 // agg
 #include <agg_trans_affine.h>
+//#include <mapnik/marker.hpp>
+
+// agg
+//#include "agg_trans_affine.h"
 
 // boost
 #include <boost/utility.hpp>
 #include <boost/scoped_ptr.hpp>
-   
+
+// FIXME
+// forward declare so that
+// apps using mapnik do not
+// need agg headers
+namespace agg {
+  class trans_affine;
+}
+
 namespace mapnik {
+
+class marker;
    
 struct rasterizer;
    
@@ -57,6 +71,8 @@ public:
     void end_map_processing(Map const& map);
     void start_layer_processing(layer const& lay);
     void end_layer_processing(layer const& lay);
+    void render_marker(const int x, const int y, marker &marker, const agg::trans_affine & tr, double opacity);
+
     void render_marker(const int x, const int y, marker &marker, const agg::trans_affine & tr, double opacity);
 
     void process(point_symbolizer const& sym,

@@ -227,6 +227,12 @@ public:
     {
         cur_attr().even_odd_flag = flag;
     }
+
+    void visibility(bool flag)
+    {
+        cur_attr().visibility_flag = flag;
+    }
+
     
     void stroke_width(double w)
     {
