@@ -282,117 +282,6 @@ public:
                                        gradient_adaptor_type,
                                        color_func_type> span_gradient_type;
 
-            interpolator_type     span_interpolator(transform);
-            gradient_adaptor_type gradient_adaptor(x1,y1,x2,y2);
-
-            span_gradient_type    span_gradient(span_interpolator,
-                                              gradient_adaptor,
-                                              m_gradient_lut,
-                                              0, 255);
-
-            render_scanlines_aa(ras, sl, ren, m_alloc, span_gradient);
-        }
-    }
-
-    template <typename Rasterizer, typename Scanline, typename Renderer>
-    void render_gradient(Rasterizer& ras,
-            Scanline& sl,
-            Renderer& ren,
-            const gradient &grad,
-            agg::trans_affine const& mtx,
-            double opacity,
-            const box2d<double> &symbol_bbox,
-            const box2d<double> &path_bbox)
-    {
-        typedef agg::gamma_lut<agg::int8u, agg::int8u> gamma_lut_type;
-        typedef agg::gradient_lut<agg::color_interpolator<agg::rgba8>, 1024> color_func_type;
-        typedef agg::span_interpolator_linear<> interpolator_type;
-        typedef agg::span_allocator<agg::rgba8> span_allocator_type;
-
-        span_allocator_type             m_alloc;
-        color_func_type                 m_gradient_lut;
-        gamma_lut_type                  m_gamma_lut;
-
-        double x1,x2,y1,y2,radius;
-        grad.get_control_points(x1,y1,x2,y2,radius);
-
-        m_gradient_lut.remove_all();
-        BOOST_FOREACH ( mapnik::stop_pair const& st, grad.get_stop_array() )
-        {
-            mapnik::color const& stop_color = st.second;
-            unsigned r= stop_color.red();
-            unsigned g= stop_color.green();
-            unsigned b= stop_color.blue();
-            unsigned a= stop_color.alpha();
-            //std::clog << "r: " << r << " g: " << g << " b: " << b << "a: " << a << "\n";
-            m_gradient_lut.add_color(st.first, agg::rgba8(r, g, b, int(a * opacity)));
-        }
-        m_gradient_lut.build_lut();
-
-        agg::trans_affine transform = mtx;
-        transform.invert();
-        agg::trans_affine tr;
-        tr = grad.get_transform();
-        tr.invert();
-        transform *= tr;
-
-        if (grad.get_units() != USER_SPACE_ON_USE)
-        {
-            double bx1=symbol_bbox.minx();
-            double by1=symbol_bbox.miny();
-            double bx2=symbol_bbox.maxx();
-            double by2=symbol_bbox.maxy();
-
-            if (grad.get_units() == OBJECT_BOUNDING_BOX)
-            {
-                bx1=path_bbox.minx();
-                by1=path_bbox.miny();
-                bx2=path_bbox.maxx();
-                by2=path_bbox.maxy();
-            }
-
-            transform.translate(-bx1,-by1);
-            transform.scale(1.0/(bx2-bx1),1.0/(by2-by1));
-        }
-
-
-        if (grad.get_gradient_type() == RADIAL)
-        {
-            typedef agg::gradient_radial_focus gradient_adaptor_type;
-            typedef agg::span_gradient<agg::rgba8,
-                                       interpolator_type,
-                                       gradient_adaptor_type,
-                                       color_func_type> span_gradient_type;
-
-            // the agg radial gradient assumes it is centred on 0
-            transform.translate(-x2,-y2);
-
-            // scale everything up since agg turns things into integers a bit too soon
-            int scaleup=255;
-            radius*=scaleup;
-            x1*=scaleup;
-            y1*=scaleup;
-            x2*=scaleup;
-            y2*=scaleup;
-
-            transform.scale(scaleup,scaleup);
-            interpolator_type     span_interpolator(transform);
-            gradient_adaptor_type gradient_adaptor(radius,(x1-x2),(y1-y2));
-
-            span_gradient_type    span_gradient(span_interpolator,
-                                              gradient_adaptor,
-                                              m_gradient_lut,
-                                              0, radius);
-
-            render_scanlines_aa(ras, sl, ren, m_alloc, span_gradient);
-        }
-        else
-        {
-            typedef linear_gradient_from_segment gradient_adaptor_type;
-            typedef agg::span_gradient<agg::rgba8,
-                                       interpolator_type,
-                                       gradient_adaptor_type,
-                                       color_func_type> span_gradient_type;
 
             // scale everything up since agg turns things into integers a bit too soon
             int scaleup=255;
@@ -461,7 +350,7 @@ public:
             if (attr.fill_flag || attr.fill_gradient.get_gradient_type() != NO_GRADIENT)
             {
                 ras.reset();
-                
+
                 if(fabs(curved_trans_contour.width()) < 0.0001)
                 {
                     ras.add_path(curved_trans, attr.index);
@@ -489,7 +378,6 @@ public:
 
             if (attr.stroke_flag || attr.stroke_gradient.get_gradient_type() != NO_GRADIENT)
             {
-                std::clog << "stroking\n";
                 curved_stroked_.width(attr.stroke_width);
                 //m_curved_stroked.line_join((attr.line_join == miter_join) ? miter_join_round : attr.line_join);
                 curved_stroked_.line_join(attr.line_join);

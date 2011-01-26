@@ -33,29 +33,6 @@
         <Rule>
             <ShieldSymbolizer
              name="[label]"
-             file="../svg/ellipses.svg" 
-             allow_overlap="true"
-             face_name="DejaVu Sans Book"
-             size="10"
-             no_text="false"
-             opacity=".5"
-             text-opacity=".3"
-             allow_overlap="true"
-             avoid_edges="false"
-            />
-        </Rule>
-        <Rule>
-            <PointSymbolizer
-                allow_overlap="true" />
-        </Rule>
-    </Style>
-    <Style name="2">
-        <Rule>
-            <LineSymbolizer></LineSymbolizer>
-        </Rule>
-        <Rule>
-            <ShieldSymbolizer
-             name="[label]"
              file="../svg/ellipses.svg"
              allow_overlap="true"
              face_name="DejaVu Sans Book"
