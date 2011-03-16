@@ -139,6 +139,7 @@ source = Split(
     markers_symbolizer.cpp
     metawriter.cpp
     raster_colorizer.cpp
+    wkt/wkt_factory.cpp
     """   
     )
 
