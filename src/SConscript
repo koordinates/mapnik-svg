@@ -141,6 +141,8 @@ source = Split(
     raster_colorizer.cpp
     text_placements.cpp
     wkt/wkt_factory.cpp
+    metawriter_inmem.cpp
+    metawriter_factory.cpp
     """   
     )
 

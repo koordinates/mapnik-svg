@@ -2,7 +2,7 @@
  * 
  * This file is part of Mapnik (c++ mapping toolkit)
  *
- * Copyright (C) 2006 Artem Pavlenko
+ * Copyright (C) 2011 Artem Pavlenko
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -21,32 +21,24 @@
  *****************************************************************************/
 
 //$Id$
-#ifndef UNICODE_HPP
-#define UNICODE_HPP
 
-//mapnik
-#include <mapnik/config.hpp>
-// icu
-#include <unicode/unistr.h>
-#include <unicode/ucnv.h>
-// boost
-#include <boost/utility.hpp>
-#include <boost/cstdint.hpp>
-// stl
-#include <string>
+#ifndef MAPNIK_SEGMENT_HPP
+#define MAPNIK_SEGMENT_HPP
 
-namespace mapnik {
+#include <boost/tuple/tuple.hpp>
 
-class MAPNIK_DECL transcoder : private boost::noncopyable
+namespace mapnik
 {
-public:
-    explicit transcoder (std::string const& encoding);
-    UnicodeString transcode(const char* data, boost::int32_t length = -1) const;  
-    ~transcoder(); 
-private:
-    bool ok_;
-    UConverter * conv_;
-};
+
+typedef boost::tuple<double,double,double,double> segment_t;
+
+static bool y_order(segment_t const& first,segment_t const& second)
+{
+    double miny0 = std::min(first.get<1>(),first.get<3>());
+    double miny1 = std::min(second.get<1>(),second.get<3>());
+    return miny0 > miny1;
 }
 
-#endif // UNICODE_HPP
+}
+
+#endif //MAPNIK_SEGMENT_HPP

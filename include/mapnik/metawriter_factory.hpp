@@ -1,8 +1,8 @@
 /*****************************************************************************
- * 
+ *
  * This file is part of Mapnik (c++ mapping toolkit)
  *
- * Copyright (C) 2006 Artem Pavlenko
+ * Copyright (C) 2011 MapQuest
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -20,33 +20,36 @@
  *
  *****************************************************************************/
 
-//$Id$
-#ifndef UNICODE_HPP
-#define UNICODE_HPP
 
-//mapnik
-#include <mapnik/config.hpp>
-// icu
-#include <unicode/unistr.h>
-#include <unicode/ucnv.h>
+#ifndef METAWRITER_FACTORY_HPP
+#define METAWRITER_FACTORY_HPP
+
+// mapnik
+#include <mapnik/metawriter.hpp>
+
 // boost
-#include <boost/utility.hpp>
-#include <boost/cstdint.hpp>
-// stl
-#include <string>
+#include <boost/property_tree/ptree.hpp>
 
 namespace mapnik {
 
-class MAPNIK_DECL transcoder : private boost::noncopyable
-{
-public:
-    explicit transcoder (std::string const& encoding);
-    UnicodeString transcode(const char* data, boost::int32_t length = -1) const;  
-    ~transcoder(); 
-private:
-    bool ok_;
-    UConverter * conv_;
-};
-}
+/**
+ * Creates a metawriter with the properties specified in the property
+ * tree argument. Currently, this is hard-coded to the JSON and inmem
+ * metawriters, but should provide an easy point to make them a
+ * proper factory method if this is wanted in the future.
+ */
+metawriter_ptr metawriter_create(const boost::property_tree::ptree &pt);
 
-#endif // UNICODE_HPP
+/**
+ * Writes properties into the given property tree representing the 
+ * metawriter argument, and which can be used to reconstruct it.
+ */
+void metawriter_save(
+  const metawriter_ptr &m, 
+  boost::property_tree::ptree &pt,
+  bool explicit_defaults);
+
+};
+
+#endif /* METAWRITER_FACTORY_HPP */
+
