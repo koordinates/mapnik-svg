@@ -305,16 +305,18 @@ class PDFPrinter:
                 measure[pyPdf.generic.NameObject('/GCS')]=gcs
                 bounds=pyPdf.generic.ArrayObject()
                 for x in (0.0,0.0,0.0,1.0,1.0,1.0,1.0,0.0):
-                    bounds.append(pyPdf.generic.FloatObject(x))
+                    bounds.append(pyPdf.generic.FloatObject(str(x)))
                 measure[pyPdf.generic.NameObject('/Bounds')]=bounds
                 measure[pyPdf.generic.NameObject('/LPTS')]=bounds
                 gpts=pyPdf.generic.ArrayObject()
                 
                 proj=Projection(m.srs)
-                rawgpts=proj.inverse(m.envelope())
-                # these are in lat,lon order according to the standard
-                for x in (rawgpts.miny, rawgpts.minx, rawgpts.miny, rawgpts.maxx, rawgpts.maxy, rawgpts.maxx, rawgpts.maxy, rawgpts.minx):
-                    gpts.append(pyPdf.generic.FloatObject(x))
+                env=m.envelope()
+                for x in ((env.minx, env.miny), (env.minx, env.maxy), (env.maxx, env.maxy), (env.maxx, env.miny)):
+                    latlon_corner=proj.inverse(Coord(*x))
+                    # these are in lat,lon order according to the standard
+                    gpts.append(pyPdf.generic.FloatObject(str(latlon_corner.y)))
+                    gpts.append(pyPdf.generic.FloatObject(str(latlon_corner.x)))
                 measure[pyPdf.generic.NameObject('/GPTS')]=gpts
                 
                 vp=pyPdf.generic.DictionaryObject()
@@ -322,7 +324,7 @@ class PDFPrinter:
                 bbox=pyPdf.generic.ArrayObject()
                 
                 for x in self.map_box:
-                    bbox.append(pyPdf.generic.FloatObject(x))
+                    bbox.append(pyPdf.generic.FloatObject(str(x)))
                 vp[pyPdf.generic.NameObject('/BBox')]=bbox
                 vp[pyPdf.generic.NameObject('/Measure')]=measure
                 
