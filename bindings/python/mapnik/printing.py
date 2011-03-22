@@ -18,6 +18,7 @@ see the documentation of mapnik2.printing.PDFPrinter() for options
 
 from . import render, Map, Box2d, MemoryDatasource, Layer, Feature, Projection, ProjTransform, Coord, Style, Rule
 import math
+import os
 
 try:
     import cairo
@@ -32,6 +33,11 @@ try:
 except ImportError:
     HAS_PANGOCAIRO_MODULE = False
 
+try:
+    import pyPdf
+    HAS_PYPDF = True
+except ImportError:
+    HAS_PYPDF = False
 
 class centering:
     """Style of centering to use with the map, the default is constrained
@@ -269,6 +275,67 @@ class PDFPrinter:
     def finish(self):
         if self._s:
             self._s.finish()
+    
+    def add_geospatial_pdf_header(self,m,filename,epsg=None,wkt=None):
+        """ Postprocessing step to add geospatial PDF information to PDF file as per
+        PDF standard 1.7 extension level 3 (also in draft PDF v2 standard at time of writing)
+        
+        one of either the epsg code or wkt text for the projection must be provided
+        
+        Should be called *after* the page has had .finish() called"""
+        if HAS_PYPDF and (epsg or wkt):
+            infile=file(filename,'rb')
+            out_tempname = filename+".geospatial_temp"
+            outfile=file(out_tempname,'wb')
+            
+            i=pyPdf.PdfFileReader(infile)
+            o=pyPdf.PdfFileWriter()
+            
+            for p in i.pages:
+                gcs = pyPdf.generic.DictionaryObject()
+                gcs[pyPdf.generic.NameObject('/Type')]=pyPdf.generic.NameObject('/PROJCS')
+                if epsg:
+                    gcs[pyPdf.generic.NameObject('/EPSG')]=pyPdf.generic.NumberObject(int(epsg))
+                if wkt:
+                    gcs[pyPdf.generic.NameObject('/WKT')]=pyPdf.generic.TextStringObject(wkt)
+                
+                measure = pyPdf.generic.DictionaryObject()
+                measure[pyPdf.generic.NameObject('/Type')]=pyPdf.generic.NameObject('/Measure')
+                measure[pyPdf.generic.NameObject('/Subtype')]=pyPdf.generic.NameObject('/GEO')
+                measure[pyPdf.generic.NameObject('/GCS')]=gcs
+                bounds=pyPdf.generic.ArrayObject()
+                for x in (0.0,0.0,0.0,1.0,1.0,1.0,1.0,0.0):
+                    bounds.append(pyPdf.generic.FloatObject(x))
+                measure[pyPdf.generic.NameObject('/Bounds')]=bounds
+                measure[pyPdf.generic.NameObject('/LPTS')]=bounds
+                gpts=pyPdf.generic.ArrayObject()
+                
+                proj=Projection(m.srs)
+                rawgpts=proj.inverse(m.envelope())
+                # these are in lat,lon order according to the standard
+                for x in (rawgpts.miny, rawgpts.minx, rawgpts.miny, rawgpts.maxx, rawgpts.maxy, rawgpts.maxx, rawgpts.maxy, rawgpts.minx):
+                    gpts.append(pyPdf.generic.FloatObject(x))
+                measure[pyPdf.generic.NameObject('/GPTS')]=gpts
+                
+                vp=pyPdf.generic.DictionaryObject()
+                vp[pyPdf.generic.NameObject('/Type')]=pyPdf.generic.NameObject('/Viewport')
+                bbox=pyPdf.generic.ArrayObject()
+                
+                for x in self.map_box:
+                    bbox.append(pyPdf.generic.FloatObject(x))
+                vp[pyPdf.generic.NameObject('/BBox')]=bbox
+                vp[pyPdf.generic.NameObject('/Measure')]=measure
+                
+                vpa = pyPdf.generic.ArrayObject()
+                vpa.append(vp)
+                p[pyPdf.generic.NameObject('/VP')]=vpa
+                o.addPage(p)
+                
+            o.write(outfile)
+            infile=None
+            outfile=None
+            os.rename(out_tempname,filename)
+        
     
     def get_context(self):
         """allow access so that extra 'bits' can be rendered to the page directly"""
@@ -698,7 +765,7 @@ class PDFPrinter:
                 # check through the features to find which combinations of styles are active
                 # for each unique combination add a legend entry
                 for f in l.datasource.all_features():
-                    if f.geometry:
+                    if f.num_geometries > 0:
                         active_rules = []
                         rule_text = ""
                         for s in l.styles:
