@@ -232,7 +232,8 @@ def convert_pdf_pages_to_layers(filename,output_name=None,layer_names=()):
     if output_name:
         outfile = file(output_name, 'wb')
     else:
-        outfile = tempfile.NamedTemporaryFile(dir=os.path.dirname(filename),delete=False)
+        (outfd,outfilename) = tempfile.mkstemp(dir=os.path.dirname(filename))
+        outfile = os.fdopen(outfd,'wb')
         
     i = pyPdf.PdfFileReader(infile)
     o = pyPdf.PdfFileWriter()
@@ -294,7 +295,7 @@ def convert_pdf_pages_to_layers(filename,output_name=None,layer_names=()):
     infile.close()
     
     if not output_name:
-        os.rename(outfile.name, filename)
+        os.rename(outfilename, filename)
 
 class PDFPrinter:
     """Main class for creating PDF print outs, basically contruct an instance
@@ -380,14 +381,15 @@ class PDFPrinter:
         Should be called *after* the page has had .finish() called"""
         if HAS_PYPDF and (epsg or wkt):
             infile=file(filename,'rb')
-            outfile=tempfile.NamedTemporaryFile(dir=os.path.dirname(filename),delete=False)
+            (outfd,outfilename) = tempfile.mkstemp(dir=os.path.dirname(filename))
+            outfile = os.fdopen(outfd,'wb')
             
             i=pyPdf.PdfFileReader(infile)
             o=pyPdf.PdfFileWriter()
             
             # preserve OCProperties at document root if we have one
-            if i._root.getObject().has_key(pyPdf.generic.NameObject('/OCProperties')):
-                o._root.getObject()[pyPdf.generic.NameObject('/OCProperties')] = i._root.getObject()[pyPdf.generic.NameObject('/OCProperties')]
+            if i.trailer['/Root'].has_key(pyPdf.generic.NameObject('/OCProperties')):
+                o._root.getObject()[pyPdf.generic.NameObject('/OCProperties')] = i.trailer['/Root'].getObject()[pyPdf.generic.NameObject('/OCProperties')]
             
             for p in i.pages:
                 gcs = pyPdf.generic.DictionaryObject()
@@ -434,7 +436,7 @@ class PDFPrinter:
             o.write(outfile)
             infile=None
             outfile.close()
-            os.rename(outfile.name,filename)
+            os.rename(outfilename,filename)
         
     
     def get_context(self):
