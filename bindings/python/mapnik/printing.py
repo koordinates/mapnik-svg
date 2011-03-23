@@ -19,6 +19,7 @@ see the documentation of mapnik2.printing.PDFPrinter() for options
 from . import render, Map, Box2d, MemoryDatasource, Layer, Feature, Projection, ProjTransform, Coord, Style, Rule
 import math
 import os
+import tempfile
 
 try:
     import cairo
@@ -211,11 +212,96 @@ def round_grid_generator(first,last,step):
             val += step
             yield val
 
+
+def convert_pdf_pages_to_layers(filename,output_name=None,layer_names=()):
+    """
+    opens the given multipage PDF and converts each page to be a layer in a single page PDF
+    layer_names should be a sequence of the user visible names of the layers, if not given
+    or if shorter than num pages generic names will be given to the unnamed layers
+    
+    if output_name is not provided a temporary file will be used for the conversion which
+    will then be copied back over the source file.
+    
+    requires pyPdf >= 1.13 to be available"""
+    
+
+    if not HAS_PYPDF:
+        raise Exception("pyPdf Not available")
+
+    infile = file(filename, 'rb')
+    if output_name:
+        outfile = file(output_name, 'wb')
+    else:
+        outfile = tempfile.NamedTemporaryFile(dir=os.path.dirname(filename),delete=False)
+        
+    i = pyPdf.PdfFileReader(infile)
+    o = pyPdf.PdfFileWriter()
+    
+    template_page_size = i.pages[0].mediaBox
+    op = o.addBlankPage(width=template_page_size.getWidth(),height=template_page_size.getHeight())
+    
+    contentkey = pyPdf.generic.NameObject('/Contents')
+    resourcekey = pyPdf.generic.NameObject('/Resources')
+    propertieskey = pyPdf.generic.NameObject('/Properties')
+    op[contentkey] = pyPdf.generic.ArrayObject()
+    op[resourcekey] = pyPdf.generic.DictionaryObject()
+    properties = pyPdf.generic.DictionaryObject()
+    ocgs = pyPdf.generic.ArrayObject()
+    
+    for (i, p) in enumerate(i.pages):
+        # first start an OCG for the layer
+        ocgname = pyPdf.generic.NameObject('/oc%d' % i)
+        ocgstart = pyPdf.generic.DecodedStreamObject()
+        ocgstart._data = "/OC %s BDC\n" % ocgname
+        ocgend = pyPdf.generic.DecodedStreamObject()
+        ocgend._data = "EMC\n"
+        if isinstance(p['/Contents'],pyPdf.generic.ArrayObject):
+            p[pyPdf.generic.NameObject('/Contents')].insert(0,ocgstart)
+            p[pyPdf.generic.NameObject('/Contents')].append(ocgend)
+        else:
+            p[pyPdf.generic.NameObject('/Contents')] = pyPdf.generic.ArrayObject((ocgstart,p['/Contents'],ocgend))
+            
+        op.mergePage(p)
+        
+        ocg = pyPdf.generic.DictionaryObject()
+        ocg[pyPdf.generic.NameObject('/Type')] = pyPdf.generic.NameObject('/OCG')
+        if len(layer_names) > i:
+            ocg[pyPdf.generic.NameObject('/Name')] = pyPdf.generic.TextStringObject(layer_names[i])
+        else:
+            ocg[pyPdf.generic.NameObject('/Name')] = pyPdf.generic.TextStringObject('Layer %d' % (i+1))
+        indirect_ocg = o._addObject(ocg)
+        properties[ocgname] = indirect_ocg
+        ocgs.append(indirect_ocg)
+    
+    op[resourcekey][propertieskey] = o._addObject(properties)
+    
+    ocproperties = pyPdf.generic.DictionaryObject()
+    ocproperties[pyPdf.generic.NameObject('/OCGs')] = ocgs
+    defaultview = pyPdf.generic.DictionaryObject()
+    defaultview[pyPdf.generic.NameObject('/Name')] = pyPdf.generic.TextStringObject('Default')
+    defaultview[pyPdf.generic.NameObject('/BaseState ')] = pyPdf.generic.NameObject('/ON ')
+    defaultview[pyPdf.generic.NameObject('/ON')] = ocgs
+    defaultview[pyPdf.generic.NameObject('/Order')] = ocgs
+    defaultview[pyPdf.generic.NameObject('/OFF')] = pyPdf.generic.ArrayObject()
+    
+    ocproperties[pyPdf.generic.NameObject('/D')] = o._addObject(defaultview)
+    
+    o._root.getObject()[pyPdf.generic.NameObject('/OCProperties')] = o._addObject(ocproperties)
+    
+    o.write(outfile)
+    
+    outfile.close()
+    infile.close()
+    
+    if not output_name:
+        os.rename(outfile.name, filename)
+
 class PDFPrinter:
     """Main class for creating PDF print outs, basically contruct an instance
     with appropriate options and then call render_map with your mapnik map
     """
-    def __init__(self, pagesize=pagesizes["a4"], 
+    def __init__(self, 
+                 pagesize=pagesizes["a4"], 
                  margin=0.005, 
                  box=None,
                  percent_box=None,
@@ -223,7 +309,8 @@ class PDFPrinter:
                  resolution=resolutions.dpi72,
                  preserve_aspect=True,
                  centering=centering.constrained,
-                 is_latlon=False):
+                 is_latlon=False,
+                 use_ocg_layers=False):
         """Creates a cairo surface and context to render a PDF with.
         
         pagesize: tuple of page size in meters, see predefined sizes in pagessizes dict (default a4)
@@ -244,6 +331,7 @@ class PDFPrinter:
                    maps constrained axis, typically this will be horizontal for portrait pages and
                    vertical for landscape pages.
         is_latlon: Is the map in lat lon degrees. If true magic anti meridian logic is enabled
+        use_ocg_layers: Create OCG layers in the PDF, requires pyPdf >= 1.13
         """
         self._pagesize = pagesize
         self._margin = margin
@@ -253,8 +341,11 @@ class PDFPrinter:
         self._preserve_aspect = preserve_aspect
         self._centering = centering
         self._is_latlon = is_latlon
+        self._use_ocg_layers = use_ocg_layers
         
         self._s = None
+        self._layer_names = []
+        self._filename = None
         
         self.map_box = None
         self.scale = None
@@ -275,6 +366,10 @@ class PDFPrinter:
     def finish(self):
         if self._s:
             self._s.finish()
+            self._s = None
+        
+        if self._use_ocg_layers:
+            convert_pdf_pages_to_layers(self._filename,layer_names=self._layer_names + ["Overlay"])
     
     def add_geospatial_pdf_header(self,m,filename,epsg=None,wkt=None):
         """ Postprocessing step to add geospatial PDF information to PDF file as per
@@ -285,11 +380,14 @@ class PDFPrinter:
         Should be called *after* the page has had .finish() called"""
         if HAS_PYPDF and (epsg or wkt):
             infile=file(filename,'rb')
-            out_tempname = filename+".geospatial_temp"
-            outfile=file(out_tempname,'wb')
+            outfile=tempfile.NamedTemporaryFile(dir=os.path.dirname(filename),delete=False)
             
             i=pyPdf.PdfFileReader(infile)
             o=pyPdf.PdfFileWriter()
+            
+            # preserve OCProperties at document root if we have one
+            if i._root.getObject().has_key(pyPdf.generic.NameObject('/OCProperties')):
+                o._root.getObject()[pyPdf.generic.NameObject('/OCProperties')] = i._root.getObject()[pyPdf.generic.NameObject('/OCProperties')]
             
             for p in i.pages:
                 gcs = pyPdf.generic.DictionaryObject()
@@ -335,8 +433,8 @@ class PDFPrinter:
                 
             o.write(outfile)
             infile=None
-            outfile=None
-            os.rename(out_tempname,filename)
+            outfile.close()
+            os.rename(outfile.name,filename)
         
     
     def get_context(self):
@@ -454,6 +552,9 @@ class PDFPrinter:
     def render_map(self,m, filename):
         """Render the given map to filename"""
         
+        # store this for later so we can post process the PDF
+        self._filename = filename
+        
         # work out the best scale to render out map at given the available space
         (eff_width,eff_height) = self._get_render_area_size()
         map_aspect = m.envelope().width()/m.envelope().height()
@@ -482,27 +583,40 @@ class PDFPrinter:
         # create our cairo surface and context and then render the map into it
         self._s = cairo.PDFSurface(filename, m2pt(self._pagesize[0]),m2pt(self._pagesize[1]))
         ctx=cairo.Context(self._s)
-        def render_map():
-            ctx.save()
-            ctx.translate(m2pt(tx),m2pt(ty))
-            #cairo defaults to 72dpi
-            ctx.scale(72.0/self._resolution,72.0/self._resolution)
-            render(m, ctx)
-            ctx.restore()
         
-        # antimeridian
-        render_map()
-        if self._is_latlon and (m.envelope().minx < -180 or m.envelope().maxx > 180):
-            old_env = m.envelope()
-            if m.envelope().minx < -180:
-                delta = 360
-            else:
-                delta = -360
-            m.zoom_to_box(Box2d(old_env.minx+delta,old_env.miny,old_env.maxx+delta,old_env.maxy))
-            render_map()
-            # restore the original env
-            m.zoom_to_box(old_env)
+        for l in m.layers:
+            # extract the layer names for naming layers if we use OCG
+            self._layer_names.append(l.title or l.name)
+        
+            layer_map = Map(m.width,m.height,m.srs)
+            layer_map.layers.append(l)
+            for s in l.styles:
+                layer_map.append_style(s,m.find_style(s))
+            layer_map.zoom_to_box(m.envelope())
+        
+            def render_map():
+                ctx.save()
+                ctx.translate(m2pt(tx),m2pt(ty))
+                #cairo defaults to 72dpi
+                ctx.scale(72.0/self._resolution,72.0/self._resolution)
+                render(layer_map, ctx)
+                ctx.restore()
             
+            # antimeridian
+            render_map()
+            if self._is_latlon and (m.envelope().minx < -180 or m.envelope().maxx > 180):
+                old_env = m.envelope()
+                if m.envelope().minx < -180:
+                    delta = 360
+                else:
+                    delta = -360
+                m.zoom_to_box(Box2d(old_env.minx+delta,old_env.miny,old_env.maxx+delta,old_env.maxy))
+                render_map()
+                # restore the original env
+                m.zoom_to_box(old_env)
+            
+            if self._use_ocg_layers:
+                self._s.show_page()
         
         self.scale = rounded_mapscale
         self.map_box = Box2d(tx,ty,tx+mapw,ty+maph)
