@@ -16,7 +16,7 @@ see the documentation of mapnik2.printing.PDFPrinter() for options
 
 """
 
-from . import render, Map, Box2d, MemoryDatasource, Layer, Feature, Projection, ProjTransform, Coord, Style, Rule
+from . import render, Map, Box2d, MemoryDatasource, Layer, Feature, Projection, ProjTransform, Coord, Style, Rule, Geometry2d
 import math
 import os
 import tempfile
@@ -213,7 +213,7 @@ def round_grid_generator(first,last,step):
             yield val
 
 
-def convert_pdf_pages_to_layers(filename,output_name=None,layer_names=()):
+def convert_pdf_pages_to_layers(filename,output_name=None,layer_names=(),reverse_all_but_last=True):
     """
     opens the given multipage PDF and converts each page to be a layer in a single page PDF
     layer_names should be a sequence of the user visible names of the layers, if not given
@@ -282,7 +282,11 @@ def convert_pdf_pages_to_layers(filename,output_name=None,layer_names=()):
     defaultview[pyPdf.generic.NameObject('/Name')] = pyPdf.generic.TextStringObject('Default')
     defaultview[pyPdf.generic.NameObject('/BaseState ')] = pyPdf.generic.NameObject('/ON ')
     defaultview[pyPdf.generic.NameObject('/ON')] = ocgs
-    defaultview[pyPdf.generic.NameObject('/Order')] = ocgs
+    if reverse_all_but_last:
+        defaultview[pyPdf.generic.NameObject('/Order')] = pyPdf.generic.ArrayObject(reversed(ocgs[:-1]))
+        defaultview[pyPdf.generic.NameObject('/Order')].append(ocgs[-1])
+    else:
+        defaultview[pyPdf.generic.NameObject('/Order')] = pyPdf.generic.ArrayObject(reversed(ocgs))
     defaultview[pyPdf.generic.NameObject('/OFF')] = pyPdf.generic.ArrayObject()
     
     ocproperties[pyPdf.generic.NameObject('/D')] = o._addObject(defaultview)
@@ -370,7 +374,7 @@ class PDFPrinter:
             self._s = None
         
         if self._use_ocg_layers:
-            convert_pdf_pages_to_layers(self._filename,layer_names=self._layer_names + ["Overlay"])
+            convert_pdf_pages_to_layers(self._filename,layer_names=self._layer_names + ["Legend and Information"],reverse_all_but_last=True)
     
     def add_geospatial_pdf_header(self,m,filename,epsg=None,wkt=None):
         """ Postprocessing step to add geospatial PDF information to PDF file as per
@@ -715,6 +719,10 @@ class PDFPrinter:
         first_value_y = (math.floor(m.envelope().miny / div_size) + 1) * div_size
         first_value_y_percent = (first_value_y-m.envelope().miny)/m.envelope().height()
         self._render_scale_axis(first_value_y,first_value_y_percent,self.map_box.miny,self.map_box.maxy,page_div_size,div_size,self.map_box.minx,self.map_box.maxx,False)
+        
+        if self._use_ocg_layers:
+            self._s.show_page()
+            self._layer_names.append("Coordinate Grid Overlay")
             
     def _get_sensible_scalebar_size(self,m,width=-1):
         # aim for about 8 divisions across the map
@@ -946,7 +954,7 @@ class PDFPrinter:
                             ds=l.datasource
                             layer_srs = l.srs
                         elif f.envelope().width() == 0:
-                            ds.add_feature(Feature(f.id(),"POINT(0 0)",**f.attributes))
+                            ds.add_feature(Feature(f.id(),Geometry2d.from_wkt("POINT(0 0)"),**f.attributes))
                             lemap.zoom_to_box(Box2d(-1,-1,1,1))
                             layer_srs = m.srs
                         else:
