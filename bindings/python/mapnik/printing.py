@@ -858,9 +858,9 @@ class PDFPrinter:
             if ctx is None:
                 ctx=cairo.Context(self._s)
                 (tx,ty) = self._get_meta_info_corner((self.map_box.width(),self.map_box.height()),m)
-                ctx.translate(tx,ty)
-                width = self._pagesize[0]-2*pt2m(tx)
-                height = self._pagesize[1]-self._margin-pt2m(ty)
+                ctx.translate(m2pt(tx),m2pt(ty))
+                width = self._pagesize[0]-2*tx
+                height = self._pagesize[1]-self._margin-ty
 
             x=0
             y=0
@@ -883,7 +883,7 @@ class PDFPrinter:
                 # check through the features to find which combinations of styles are active
                 # for each unique combination add a legend entry
                 for f in l.datasource.all_features():
-                    if f.num_geometries > 0:
+                    if f.num_geometries() > 0:
                         active_rules = []
                         rule_text = ""
                         for s in l.styles:
